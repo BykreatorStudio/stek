@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/nbs-rate",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/check-bills",
+      "schedule": "0 8 * * *"
+    }
+  ]
+}
