@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
@@ -9,27 +8,34 @@ export async function GET(request: NextRequest) {
   const type = searchParams.get('type')
   const next = searchParams.get('next') ?? '/dashboard'
 
-  const cookieStore = await cookies()
+  const response = NextResponse.redirect(`${origin}/login`)
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll: (c) => c.forEach(({ name, value, options }) => cookieStore.set(name, value, options)),
+        getAll: () => request.cookies.getAll(),
+        setAll: (c) => c.forEach(({ name, value, options }) => response.cookies.set(name, value, options)),
       },
     }
   )
 
   if (token_hash && type) {
     const { error } = await supabase.auth.verifyOtp({ token_hash, type: type as any })
-    if (!error) return NextResponse.redirect(`${origin}${next}`)
+    if (!error) {
+      response.headers.set('location', `${origin}${next}`)
+      return response
+    }
   }
 
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
-    if (!error) return NextResponse.redirect(`${origin}${next}`)
+    if (!error) {
+      response.headers.set('location', `${origin}${next}`)
+      return response
+    }
   }
 
-  return NextResponse.redirect(`${origin}/login`)
+  return response
 }
