@@ -1,12 +1,13 @@
 'use client'
 
+import React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 const S = 18
-const stroke = { fill: 'none' as const, stroke: 'var(--text-3)', strokeWidth: 3, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, flexShrink: 0 as const }
-const fill = { fill: 'var(--text-3)', flexShrink: 0 as const }
+const stroke = { fill: 'none' as const, stroke: 'var(--text-3)', strokeWidth: 3, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, style: { flexShrink: 0 } as React.CSSProperties }
+const fill = { fill: 'var(--text-3)', style: { flexShrink: 0 } as React.CSSProperties }
 
 const ITEMS = [
   {

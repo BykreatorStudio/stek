@@ -9,7 +9,6 @@ export default async function AnalitikaPage() {
 
   const now = new Date()
 
-  // Build last 12 months array
   const months: string[] = []
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
@@ -22,42 +21,61 @@ export default async function AnalitikaPage() {
   const [
     { data: txsRaw },
     { data: catsRaw },
+    { data: bucketsRaw },
     { data: savingsRaw },
     { data: savingsHistoryRaw },
   ] = await Promise.all([
-    supabase.from('transactions').select('type, amount, currency, month, category_id').gte('date', from).lte('date', to),
-    supabase.from('categories').select('id, name'),
+    supabase.from('transactions').select('type, amount, month, category_id').gte('date', from).lte('date', to),
+    supabase.from('categories').select('id, name, bucket_id'),
+    supabase.from('buckets').select('id, name'),
     supabase.from('savings').select('amount'),
     supabase.from('savings').select('amount, date').order('date', { ascending: true }),
   ])
 
   const txs = txsRaw ?? []
   const cats = catsRaw ?? []
+  const buckets = bucketsRaw ?? []
   const totalSavings = (savingsRaw ?? []).reduce((s: number, r: any) => s + r.amount, 0)
 
-  // Build monthly data
+  const catMap = new Map(cats.map((c: any) => [c.id, { name: c.name, bucketId: c.bucket_id }]))
+  const bucketMap = new Map(buckets.map((b: any) => [b.id, b.name]))
+
+  // Monthly data with per-category and per-bucket breakdown
   const monthlyData = months.map(m => {
     const mTxs = txs.filter((t: any) => t.month === m)
     const prihodi = mTxs.filter((t: any) => t.type === 'prihod').reduce((s: number, t: any) => s + t.amount, 0)
     const rashodi = mTxs.filter((t: any) => t.type === 'rashod').reduce((s: number, t: any) => s + t.amount, 0)
+
+    const catBreakdown: Record<string, number> = {}
+    const bucketBreakdown: Record<string, number> = {}
+
+    mTxs.filter((t: any) => t.type === 'rashod').forEach((t: any) => {
+      if (t.category_id) {
+        const cat = catMap.get(t.category_id)
+        const catName = cat?.name ?? 'Ostalo'
+        catBreakdown[catName] = (catBreakdown[catName] ?? 0) + t.amount
+        const bucketName = cat?.bucketId ? (bucketMap.get(cat.bucketId) ?? 'Ostalo') : 'Ostalo'
+        bucketBreakdown[bucketName] = (bucketBreakdown[bucketName] ?? 0) + t.amount
+      } else {
+        catBreakdown['Ostalo'] = (catBreakdown['Ostalo'] ?? 0) + t.amount
+        bucketBreakdown['Ostalo'] = (bucketBreakdown['Ostalo'] ?? 0) + t.amount
+      }
+    })
+
     const [year, mon] = m.split('-')
     const label = new Date(+year, +mon - 1, 1).toLocaleString('sr-Latn-RS', { month: 'short' })
-    return { month: m, label: label.charAt(0).toUpperCase() + label.slice(1), prihodi, rashodi, bilans: prihodi - rashodi }
+    return {
+      month: m,
+      label: label.charAt(0).toUpperCase() + label.slice(1),
+      prihodi,
+      rashodi,
+      bilans: prihodi - rashodi,
+      catBreakdown,
+      bucketBreakdown,
+    }
   })
 
-  // Build category breakdown (last 3 months for donut)
-  const catMap = new Map(cats.map((c: any) => [c.id, c.name]))
-  const catTotals: Record<string, number> = {}
-  txs.filter((t: any) => t.type === 'rashod' && t.category_id).forEach((t: any) => {
-    const name = catMap.get(t.category_id) ?? 'Ostalo'
-    catTotals[name] = (catTotals[name] ?? 0) + t.amount
-  })
-  const categoryData = Object.entries(catTotals)
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 8)
-
-  // Savings over time (cumulative)
+  // Savings cumulative
   const savingsHistory = (() => {
     let running = 0
     return (savingsHistoryRaw ?? []).map((s: any) => {
@@ -73,7 +91,6 @@ export default async function AnalitikaPage() {
   return (
     <AnalitikaClient
       monthlyData={monthlyData}
-      categoryData={categoryData}
       savingsHistory={savingsHistory}
       totalSavings={totalSavings}
     />
