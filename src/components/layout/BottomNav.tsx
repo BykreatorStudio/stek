@@ -160,7 +160,7 @@ export default function BottomNav() {
         background: 'var(--card)',
         borderTop: '1px solid var(--border)',
         zIndex: 100,
-        paddingBottom: 'var(--safe-bottom)',
+        paddingBottom: 'calc(var(--safe-bottom) + 8px)',
       }}>
         <div style={{ display: 'flex', height: 'var(--nav-height)', alignItems: 'center', maxWidth: 540, margin: '0 auto' }}>
           {navLeft.map(item => <NavItem key={item.href} {...item} />)}

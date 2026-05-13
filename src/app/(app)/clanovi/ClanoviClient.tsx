@@ -57,6 +57,11 @@ function InviteModal({ onClose }: { onClose: () => void }) {
       expires_at: expiresAt,
     })
     if (err) { setError(err.message); setLoading(false); return }
+    await fetch('/api/send-invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim().toLowerCase(), code: newCode }),
+    }).catch(() => {})
     setCode(newCode)
     setLoading(false)
   }
