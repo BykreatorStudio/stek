@@ -2,23 +2,24 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
-export default function LoginPage() {
+export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const router = useRouter()
+  const [sent, setSent] = useState(false)
+  const [error, setError] = useState('')
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true); setError('')
     const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) { setError('Pogrešan email ili lozinka.'); setLoading(false); return }
-    router.push('/dashboard'); router.refresh()
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+    })
+    setLoading(false)
+    if (error) { setError('Greška pri slanju. Proveri email adresu.'); return }
+    setSent(true)
   }
 
   return (
@@ -36,7 +37,7 @@ export default function LoginPage() {
           <path d="M173.052 52.0441C171.163 52.0441 169.627 51.6777 168.444 50.9449C167.288 50.1839 166.485 49.3243 166.034 48.3661H164.893L165.104 42.997H165.907C165.907 44.1526 166.119 45.1108 166.541 45.8718C166.992 46.6328 167.655 47.2105 168.528 47.6051C169.402 47.9715 170.445 48.1547 171.657 48.1547C172.643 48.1547 173.503 48.0279 174.235 47.7742C174.968 47.5205 175.56 47.126 176.011 46.5905C176.49 46.055 176.828 45.3363 177.026 44.4344C177.251 43.5044 177.364 42.3911 177.364 41.0946C177.364 39.7982 177.251 38.7131 177.026 37.8394C176.828 36.9375 176.49 36.2047 176.011 35.6411C175.56 35.0774 174.968 34.6828 174.235 34.4573C173.531 34.2037 172.671 34.0769 171.657 34.0769C170.445 34.0769 169.402 34.2742 168.528 34.6687C167.655 35.0351 166.992 35.5988 166.541 36.3598C166.119 37.0925 165.907 38.0508 165.907 39.2345H165.104L164.893 34.0769H165.738C166.245 32.865 167.077 31.9208 168.232 31.2444C169.416 30.5398 170.924 30.1875 172.756 30.1875C175.715 30.1875 177.984 31.1739 179.562 33.1468C181.141 35.1197 181.93 37.7689 181.93 41.0946C181.93 44.4203 181.169 47.0837 179.647 49.0848C178.125 51.0576 175.927 52.0441 173.052 52.0441ZM165.907 58.935H161.384V30.6103H165.527V35.5988L165.907 36.1484V58.935Z" fill="#100F0D"/>
           <path d="M148.313 52.0441C146.03 52.0441 144.128 51.5931 142.606 50.6912C141.084 49.7612 139.957 48.4788 139.224 46.8441C138.491 45.1813 138.125 43.2648 138.125 41.0946C138.125 38.9245 138.533 37.0221 139.351 35.3874C140.196 33.7528 141.38 32.4845 142.902 31.5826C144.424 30.6525 146.227 30.1875 148.313 30.1875C150.201 30.1875 151.864 30.5539 153.302 31.2867C154.767 31.9913 155.895 33.02 156.684 34.3728C157.501 35.7256 157.91 37.3603 157.91 39.2768C157.91 39.8405 157.881 40.39 157.825 40.9255C157.797 41.4328 157.755 41.8556 157.698 42.1938H140.281V39.15H153.978L153.513 39.5727C153.626 38.2763 153.485 37.2194 153.09 36.402C152.724 35.5847 152.118 34.9787 151.272 34.5842C150.455 34.1896 149.426 33.9923 148.186 33.9923C145.96 33.9923 144.438 34.556 143.62 35.6833C142.803 36.7825 142.394 38.3044 142.394 40.2491V41.5174C142.394 42.9266 142.564 44.1244 142.902 45.1108C143.268 46.0691 143.888 46.7878 144.762 47.2669C145.636 47.746 146.833 47.9856 148.355 47.9856C150.131 47.9856 151.385 47.7037 152.118 47.1401C152.851 46.5764 153.217 45.8295 153.217 44.8995V44.5612H157.741V44.9417C157.741 46.3791 157.346 47.6333 156.557 48.7043C155.768 49.7471 154.669 50.5644 153.259 51.1563C151.878 51.7481 150.23 52.0441 148.313 52.0441Z" fill="#100F0D"/>
           <path d="M137.142 51.6214H117.273V48.028L127.503 37.6282L130.209 34.9648V34.6266H127.503H117.907V30.6104H136.508V34.4575L126.024 44.8996L123.572 47.267L123.53 47.6052H126.024H137.142V51.6214ZM129.829 27.947H124.544L120.19 22.6626V22.4512H124.544L127.038 25.495H127.377L129.871 22.4512H134.225V22.6626L129.829 27.947Z" fill="#100F0D"/>
-          <path d="M101.062 51.6212H92.4797V47.4782H101.062C103.316 47.4782 105.134 47.1541 106.515 46.5059C107.924 45.8577 108.939 44.8008 109.559 43.3352C110.207 41.8415 110.531 39.8827 110.531 37.4589C110.531 35.0351 110.207 33.0904 109.559 31.6248C108.939 30.1311 107.924 29.0601 106.515 28.4119C105.134 27.7355 103.316 27.3973 101.062 27.3973H92.4797V23.2965H101.062C103.993 23.2965 106.529 23.8743 108.671 25.0298C110.841 26.1572 112.504 27.7777 113.66 29.8915C114.815 32.0053 115.393 34.5278 115.393 37.4589C115.393 40.39 114.815 42.9124 113.66 45.0262C112.504 47.14 110.841 48.7747 108.671 49.9302C106.529 51.0576 103.993 51.6212 101.062 51.6212ZM95.5658 51.6212H91V23.2965H95.5658V51.6212Z" fill="#100F0D"/>
+          <path d="M101.062 51.6212H92.4797V47.4782H101.062C103.316 47.4782 105.134 47.1541 106.515 46.5059C107.924 44.8008 108.939 44.8008 109.559 43.3352C110.207 41.8415 110.531 39.8827 110.531 37.4589C110.531 35.0351 110.207 33.0904 109.559 31.6248C108.939 30.1311 107.924 29.0601 106.515 28.4119C105.134 27.7355 103.316 27.3973 101.062 27.3973H92.4797V23.2965H101.062C103.993 23.2965 106.529 23.8743 108.671 25.0298C110.841 26.1572 112.504 27.7777 113.66 29.8915C114.815 32.0053 115.393 34.5278 115.393 37.4589C115.393 40.39 114.815 42.9124 113.66 45.0262C112.504 47.14 110.841 48.7747 108.671 49.9302C106.529 51.0576 103.993 51.6212 101.062 51.6212ZM95.5658 51.6212H91V23.2965H95.5658V51.6212Z" fill="#100F0D"/>
           <path d="M10 16.3333C10 12.8355 12.8355 10 16.3333 10H60.6667C64.1645 10 67 12.8355 67 16.3333V38.5C67 54.2401 54.2401 67 38.5 67C22.7599 67 10 54.2401 10 38.5V16.3333Z" stroke="black" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="10 11"/>
         </svg>
       </div>
@@ -48,42 +49,40 @@ export default function LoginPage() {
         paddingBottom: 'calc(28px + var(--safe-bottom))',
         boxShadow: '0 -1px 0 rgba(0,0,0,0.06)',
       }}>
-        <p style={{ fontSize: 17, fontWeight: 500, color: '#100F0D', marginBottom: 20 }}>Prijava</p>
-        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-            placeholder="Email adresa"
-            className="input"
-          />
-          <input
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-            autoComplete="current-password"
-            placeholder="Lozinka"
-            className="input"
-          />
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: -4 }}>
-            <Link href="/forgot-password" style={{ fontSize: 13, color: 'var(--text-2)', textDecoration: 'underline', textUnderlineOffset: '3px' }}>
-              Zaboravljena lozinka?
+        {sent ? (
+          <>
+            <p style={{ fontSize: 17, fontWeight: 500, color: '#100F0D', marginBottom: 10 }}>Proveri email</p>
+            <p style={{ fontSize: 14, color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 24 }}>
+              Poslali smo link za reset lozinke na <strong>{email}</strong>. Klikni na link u mejlu da postaviš novu lozinku.
+            </p>
+            <Link href="/login" style={{ display: 'block', textAlign: 'center', fontSize: 14, fontWeight: 500, color: 'var(--text-1)', textDecoration: 'underline', textUnderlineOffset: '3px' }}>
+              Nazad na prijavu
             </Link>
-          </div>
-          {error && <p style={{ fontSize: 13, color: 'var(--red)', paddingLeft: 4 }}>{error}</p>}
-          <button type="submit" disabled={loading} className="btn-primary" style={{ marginTop: 4 }}>
-            {loading ? 'Prijava...' : 'Prijavi se'}
-          </button>
-          <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-3)', paddingTop: 4 }}>
-            Nemaš nalog?{' '}
-            <Link href="/register" style={{ color: 'var(--text-1)', fontWeight: 500, textDecoration: 'underline', textUnderlineOffset: '3px' }}>
-              Registruj se
-            </Link>
-          </p>
-        </form>
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize: 17, fontWeight: 500, color: '#100F0D', marginBottom: 6 }}>Zaboravljena lozinka</p>
+            <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 20 }}>Unesite email adresu i poslat ćemo vam link za reset.</p>
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+                placeholder="Email adresa"
+                className="input"
+              />
+              {error && <p style={{ fontSize: 13, color: 'var(--red)', paddingLeft: 4 }}>{error}</p>}
+              <button type="submit" disabled={loading} className="btn-primary" style={{ marginTop: 4 }}>
+                {loading ? 'Slanje...' : 'Pošalji link'}
+              </button>
+              <Link href="/login" style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-3)', textDecoration: 'none', paddingTop: 4 }}>
+                Nazad na prijavu
+              </Link>
+            </form>
+          </>
+        )}
       </div>
     </div>
   )
