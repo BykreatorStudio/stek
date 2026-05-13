@@ -7,7 +7,7 @@ export default async function ClanoviPage() {
   const { data: { user } } = await supabase.auth.getUser()
   const [{ data: members }, { data: myHm }] = await Promise.all([
     supabase.from('members').select('*').order('created_at'),
-    supabase.from('household_members').select('role').eq('user_id', user.id).single(),
+    supabase.from('household_members').select('role').eq('user_id', user!.id).single(),
   ])
 
   const currentUserRole = myHm?.role ?? 'member'
