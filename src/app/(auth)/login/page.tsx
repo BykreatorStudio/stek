@@ -72,9 +72,12 @@ export default function LoginPage() {
           <button type="submit" disabled={loading} className="btn-primary" style={{ marginTop: 4 }}>
             {loading ? 'Prijava...' : 'Prijavi se'}
           </button>
-          <Link href="/register" style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-3)', textDecoration: 'none', paddingTop: 4 }}>
-            Nemaš nalog? Registruj se
-          </Link>
+          <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-3)', paddingTop: 4 }}>
+            Nemaš nalog?{' '}
+            <Link href="/register" style={{ color: 'var(--text-1)', fontWeight: 500, textDecoration: 'underline', textUnderlineOffset: '3px' }}>
+              Registruj se
+            </Link>
+          </p>
         </form>
       </div>
     </div>
