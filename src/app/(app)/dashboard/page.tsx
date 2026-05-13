@@ -10,9 +10,8 @@ function fmt(n: number) {
   return new Intl.NumberFormat('sr-Latn-RS').format(Math.round(Math.abs(n)))
 }
 
-
-function daysUntilLabel(dueDate: Date, today: Date): string {
-  const diff = Math.round((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+function daysUntilLabel(diff: number): string {
+  if (diff < 0) return `${Math.abs(diff)} ${Math.abs(diff) === 1 ? 'dan' : 'dana'} kašnjenja`
   if (diff === 0) return 'Danas'
   if (diff === 1) return 'Sutra'
   return `Za ${diff} dana`
@@ -44,7 +43,8 @@ export default async function DashboardPage() {
     { data: profileRaw },
     { data: txs },
     { data: recurringRaw },
-    { data: checksRaw },
+    { data: checksThisMonthRaw },
+    { data: checksUpcomingRaw },
     { data: creditsRaw },
     { data: creditPaysRaw },
     { data: debtsRaw },
@@ -57,24 +57,25 @@ export default async function DashboardPage() {
     supabase.from('members').select('name').eq('user_id', user.id).single(),
     supabase.from('transactions').select('*').eq('month', month),
     supabase.from('recurring_items').select('*').eq('is_active', true),
-    supabase.from('checks').select('*').eq('status', 'na_cekanju'),
+    supabase.from('cekovi').select('id, quantity, status').gte('date', monthStart).lte('date', monthEnd),
+    supabase.from('cekovi').select('id, quantity, date').eq('status', 'na_cekanju'),
     supabase.from('credits').select('*').eq('status', 'aktivan'),
     supabase.from('credit_payments').select('credit_id').gte('date', monthStart).lte('date', monthEnd),
-    supabase.from('debts').select('*').eq('status', 'aktivno'),
-    supabase.from('debt_payments').select('debt_id, amount'),
+    supabase.from('dugovi').select('*'),
+    supabase.from('debt_payments').select('debt_id, amount, date'),
     supabase.from('savings').select('amount'),
-    supabase.from('members').select('*').order('sort_order'),
+    supabase.from('members').select('*').order('created_at'),
     supabase.from('nbs_rates').select('eur_to_rsd').order('date', { ascending: false }).limit(1).single(),
-    supabase.from('transactions').select('id, type, name, amount, currency, date').order('date', { ascending: false }).limit(10),
+    supabase.from('transactions').select('id, type, name, amount, currency, date, created_at').order('created_at', { ascending: false }).limit(10),
   ])
 
-  const profile = profileRaw
   const transactions = txs ?? []
   const recurring = recurringRaw ?? []
-  const checks = checksRaw ?? []
+  const checksThisMonth = checksThisMonthRaw ?? []
+  const checksUpcoming = checksUpcomingRaw ?? []
   const credits = creditsRaw ?? []
   const creditPays = creditPaysRaw ?? []
-  const debts = debtsRaw ?? []
+  const allDebts = debtsRaw ?? []
   const debtPays = debtPaysRaw ?? []
   const members = membersRaw ?? []
   const recentTxs = recentTxsRaw ?? []
@@ -86,32 +87,35 @@ export default async function DashboardPage() {
   const balance = totalPrihodi - totalRashodi
   const hasData = transactions.length > 0
 
-  // --- Monthly obligations ---
+  // --- Debts split (mirror troškovi logic exactly) ---
+  const allDebtsWithPaid = allDebts.map((d: any) => {
+    const paid = debtPays.filter((p: any) => p.debt_id === d.id).reduce((s: number, p: any) => s + p.amount, 0)
+    return { ...d, remaining: Math.max(0, d.total_amount - paid) }
+  })
+  const activeDebts = allDebtsWithPaid.filter((d: any) => d.status === 'aktivno')
+  const settledDebtsThisMonth = allDebtsWithPaid.filter((d: any) =>
+    d.status === 'izmireno' &&
+    debtPays.some((p: any) => p.debt_id === d.id && p.date >= monthStart && p.date <= monthEnd)
+  )
+
+  // --- Monthly obligations (identical to troškovi) ---
   const paidRecurringIds = new Set(transactions.filter((t: any) => t.recurring_item_id).map((t: any) => t.recurring_item_id))
   const paidCreditIds = new Set(creditPays.map((p: any) => p.credit_id))
   const paidRecurringCount = recurring.filter((r: any) => paidRecurringIds.has(r.id)).length
   const paidCreditCount = credits.filter((c: any) => paidCreditIds.has(c.id)).length
-  const paidCount = paidRecurringCount + paidCreditCount
-  const totalObligations = recurring.length + credits.length
+  const paidChecksThisMonth = checksThisMonth.filter((c: any) => c.status === 'isplacen').length
+  const paidCount = paidRecurringCount + paidCreditCount + paidChecksThisMonth + settledDebtsThisMonth.length
+  const totalObligations = recurring.length + credits.length + checksThisMonth.length + activeDebts.length + settledDebtsThisMonth.length
   const allPaid = totalObligations > 0 && paidCount === totalObligations
 
-  // Pending checks
-  const pendingChecksQty = checks.reduce((s: number, c: any) => s + c.quantity, 0)
-  const pendingChecksAmount = pendingChecksQty * CEK_VALUE
-
-  // Fixed monthly total
+  // Fixed monthly totals
   const fixedTotal = recurring.filter((r: any) => r.type === 'fiksni').reduce((s: number, r: any) => s + (r.amount ?? 0), 0)
   const creditTotal = credits.reduce((s: number, c: any) => s + c.monthly_payment, 0)
 
-  // --- Financial picture ---
+  // --- Financial picture (only active debts) ---
   const safBalance = (savingsRaw ?? []).reduce((s: number, r: any) => s + r.amount, 0)
-
-  const debtsWithPaid = debts.map((d: any) => {
-    const paid = debtPays.filter((p: any) => p.debt_id === d.id).reduce((s: number, p: any) => s + p.amount, 0)
-    return { ...d, remaining: d.total_amount - paid }
-  })
-  const totalDugujemo = debtsWithPaid.filter((d: any) => d.direction === 'dugujemo').reduce((s: number, d: any) => s + d.remaining, 0)
-  const totalDugujuNam = debtsWithPaid.filter((d: any) => d.direction === 'duguju_nam').reduce((s: number, d: any) => s + d.remaining, 0)
+  const totalDugujemo = activeDebts.filter((d: any) => d.direction === 'dugujemo').reduce((s: number, d: any) => s + d.remaining, 0)
+  const totalDugujuNam = activeDebts.filter((d: any) => d.direction === 'duguju_nam').reduce((s: number, d: any) => s + d.remaining, 0)
   const totalKrediti = credits.reduce((s: number, c: any) => s + c.remaining_amount, 0)
 
   // --- By member ---
@@ -122,25 +126,58 @@ export default async function DashboardPage() {
     return { id: m.id, name: m.name, avatar_url: m.avatar_url ?? null, prihodi, rashodi, count: mTxs.length }
   })
 
-  // --- Upcoming in next 15 days ---
+  // --- Upcoming & overdue (next 15 days + any overdue) ---
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const in15 = new Date(today.getTime() + 15 * 24 * 60 * 60 * 1000)
 
-  type UpcomingItem = { name: string; amount: number; currency: string; dueDate: Date; label: string }
+  type UpcomingItem = { name: string; amount: number; currency: string; dueDate: Date; label: string; overdue: boolean }
   const upcomingItems: UpcomingItem[] = []
 
   for (const r of recurring) {
     if (paidRecurringIds.has(r.id)) continue
     const dueDate = getEffectiveDueDate(r.due_day, today)
-    if (dueDate >= today && dueDate <= in15) {
-      upcomingItems.push({ name: r.name, amount: r.amount ?? 0, currency: r.currency, dueDate, label: daysUntilLabel(dueDate, today) })
+    if (dueDate <= in15) {
+      const diff = Math.round((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+      upcomingItems.push({ name: r.name, amount: r.amount ?? 0, currency: r.currency, dueDate, label: daysUntilLabel(diff), overdue: diff < 0 })
     }
   }
   for (const c of credits) {
     if (paidCreditIds.has(c.id)) continue
     const dueDate = getEffectiveDueDate(c.due_day, today)
-    if (dueDate >= today && dueDate <= in15) {
-      upcomingItems.push({ name: c.name, amount: c.monthly_payment, currency: c.currency, dueDate, label: daysUntilLabel(dueDate, today) })
+    if (dueDate <= in15) {
+      const diff = Math.round((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+      upcomingItems.push({ name: c.name, amount: c.monthly_payment, currency: c.currency, dueDate, label: daysUntilLabel(diff), overdue: diff < 0 })
+    }
+  }
+  for (const c of checksUpcoming) {
+    const cDate = new Date((c as any).date + 'T00:00:00')
+    if (cDate <= in15) {
+      const diff = Math.round((cDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+      const qty = (c as any).quantity
+      upcomingItems.push({
+        name: `${qty} ${qty === 1 ? 'ček' : qty < 5 ? 'čeka' : 'čekova'}`,
+        amount: qty * CEK_VALUE,
+        currency: 'RSD',
+        dueDate: cDate,
+        label: daysUntilLabel(diff),
+        overdue: diff < 0,
+      })
+    }
+  }
+  for (const d of activeDebts) {
+    if (!(d as any).start_date) continue
+    const dDate = new Date((d as any).start_date + 'T00:00:00')
+    if (dDate <= in15) {
+      const diff = Math.round((dDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+      const toRsd = (d as any).currency === 'EUR' ? (d as any).remaining * eurToRsd : (d as any).remaining
+      upcomingItems.push({
+        name: (d as any).name,
+        amount: toRsd,
+        currency: 'RSD',
+        dueDate: dDate,
+        label: daysUntilLabel(diff),
+        overdue: diff < 0,
+      })
     }
   }
   upcomingItems.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
@@ -156,7 +193,7 @@ export default async function DashboardPage() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
             <div>
               <p style={{ fontSize: 12, color: 'var(--header-muted)', marginBottom: 3 }}>{cap(monthLabel)}</p>
-              <p style={{ fontSize: 18, color: 'var(--header-text)', fontWeight: 500 }}>Zdravo, {profile?.name}</p>
+              <p style={{ fontSize: 18, color: 'var(--header-text)', fontWeight: 500 }}>Zdravo, {(profileRaw as any)?.name}</p>
             </div>
             <NotifBell />
           </div>
@@ -200,16 +237,16 @@ export default async function DashboardPage() {
       <div style={{ maxWidth: 520, margin: '0 auto', padding: '20px 16px' }}>
 
         {/* --- Ovaj mesec --- */}
-        {(totalObligations > 0 || pendingChecksAmount > 0) && (
+        {totalObligations > 0 && (
           <>
             <p className="section-label">Ovaj mesec</p>
-            <Link href="/troskovi" style={{ textDecoration: 'none' }}>
-              <div className="card" style={{ padding: '16px 20px', marginBottom: 8 }}>
+            <Link href="/troskovi" style={{ textDecoration: 'none', display: 'block', marginBottom: 16 }}>
+              <div className="card" style={{ padding: '16px 20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                   <div>
                     <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>Mesečne obaveze</p>
                     <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
-                      {paidCount} od {totalObligations} plaćeno
+                      {paidCount} od {totalObligations} izmireno
                       {fixedTotal + creditTotal > 0 ? ` · ${fmt(fixedTotal + creditTotal)} RSD` : ''}
                     </p>
                   </div>
@@ -219,7 +256,7 @@ export default async function DashboardPage() {
                       background: allPaid ? 'var(--accent-light)' : 'rgba(248,113,113,0.12)',
                       color: allPaid ? 'var(--accent-dark)' : 'var(--red)',
                     }}>
-                      {allPaid ? 'Sve plaćeno' : `${totalObligations - paidCount} preostalo`}
+                      {allPaid ? 'Sve izmireno' : `${totalObligations - paidCount} preostalo`}
                     </span>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="9 18 15 12 9 6" />
@@ -235,25 +272,6 @@ export default async function DashboardPage() {
                 </div>
               </div>
             </Link>
-
-            {pendingChecksAmount > 0 && (
-              <Link href="/cekovi" style={{ textDecoration: 'none' }}>
-                <div className="card" style={{ padding: '16px 20px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>Čekovi na naplati</p>
-                    <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
-                      {pendingChecksQty} {pendingChecksQty === 1 ? 'ček' : pendingChecksQty < 5 ? 'čeka' : 'čekova'}
-                    </p>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <p className="num" style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-1)' }}>{fmt(pendingChecksAmount)} RSD</p>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="9 18 15 12 9 6" />
-                    </svg>
-                  </div>
-                </div>
-              </Link>
-            )}
           </>
         )}
 
@@ -270,8 +288,8 @@ export default async function DashboardPage() {
                   </svg>
                 </div>
                 <div>
-                  <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)' }}>Sef</p>
-                  <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>Gotovinska štednja</p>
+                  <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)' }}>Štednja</p>
+                  <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>Svi sefovi</p>
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -295,11 +313,11 @@ export default async function DashboardPage() {
                     </svg>
                   </div>
                   <div>
-                    <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)' }}>Dugovi</p>
+                    <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)' }}>Pozajmice</p>
                     <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>
-                      {totalDugujemo > 0 && `Mi dugujemo ${fmt(totalDugujemo)} RSD`}
+                      {totalDugujemo > 0 && `Primljene: ${fmt(totalDugujemo)} RSD`}
                       {totalDugujemo > 0 && totalDugujuNam > 0 && ' · '}
-                      {totalDugujuNam > 0 && `Duguju nam ${fmt(totalDugujuNam)} RSD`}
+                      {totalDugujuNam > 0 && `Date: ${fmt(totalDugujuNam)} RSD`}
                     </p>
                   </div>
                 </div>
@@ -380,26 +398,31 @@ export default async function DashboardPage() {
           <>
             <p className="section-label">Uskoro za naplatu</p>
             <div className="card" style={{ overflow: 'hidden', marginBottom: 16 }}>
-              {upcomingItems.map((item, i) => (
-                <div key={i} style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '13px 20px',
-                  borderBottom: i < upcomingItems.length - 1 ? '1px solid var(--border)' : 'none',
-                }}>
-                  <div style={{ minWidth: 0 }}>
-                    <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
-                    <p className="num" style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>{fmt(item.amount)} {item.currency}</p>
-                  </div>
-                  <span style={{
-                    flexShrink: 0, marginLeft: 12,
-                    fontSize: 11, fontWeight: 500, padding: '3px 10px', borderRadius: 20,
-                    background: item.label === 'Danas' || item.label === 'Sutra' ? 'rgba(248,113,113,0.12)' : 'var(--bg-subtle)',
-                    color: item.label === 'Danas' || item.label === 'Sutra' ? 'var(--red)' : 'var(--text-2)',
+              {upcomingItems.map((item, i) => {
+                const urgent = item.overdue || item.label === 'Danas' || item.label === 'Sutra'
+                return (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '13px 20px',
+                    borderBottom: i < upcomingItems.length - 1 ? '1px solid var(--border)' : 'none',
                   }}>
-                    {item.label}
-                  </span>
-                </div>
-              ))}
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ fontSize: 14, fontWeight: 500, color: urgent ? 'var(--red)' : 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {item.name}
+                      </p>
+                      <p className="num" style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>{fmt(item.amount)} {item.currency}</p>
+                    </div>
+                    <span style={{
+                      flexShrink: 0, marginLeft: 12,
+                      fontSize: 11, fontWeight: 500, padding: '3px 10px', borderRadius: 20,
+                      background: urgent ? 'rgba(217,48,37,0.1)' : 'var(--bg-subtle)',
+                      color: urgent ? 'var(--red)' : 'var(--text-2)',
+                    }}>
+                      {item.label}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           </>
         )}

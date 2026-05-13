@@ -15,7 +15,7 @@ export default async function KreditiPage() {
 
   const [{ data: creditsRaw }, { data: bucketsRaw }, { data: creditPaysRaw }] = await Promise.all([
     supabase.from('credits').select('*').eq('status', 'aktivan').order('created_at', { ascending: false }),
-    supabase.from('buckets').select('id, name, sort_order').order('sort_order'),
+    supabase.from('buckets').select('id, name').order('name'),
     supabase.from('credit_payments').select('*'),
   ])
 

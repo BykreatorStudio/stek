@@ -54,7 +54,7 @@
   padding: 0;
 }
 
-html, body { height: 100%; overscroll-behavior: none; }
+html, body { height: 100%; overscroll-behavior: none; overflow-x: hidden; }
 
 body {
   font-family: 'articulat-cf', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -138,3 +138,16 @@ input, button, select, textarea { font-family: inherit; }
 }
 
 .input:focus { border-color: var(--accent); background: var(--card); }
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.skeleton {
+  background: var(--border);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+.skeleton-dark {
+  background: rgba(255,255,255,0.12);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}

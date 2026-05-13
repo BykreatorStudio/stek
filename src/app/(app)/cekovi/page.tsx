@@ -15,7 +15,7 @@ export default async function CekoviPage() {
   if (!user) redirect('/login')
 
   const { data } = await supabase
-    .from('checks')
+    .from('cekovi')
     .select('*')
     .order('date', { ascending: true })
 

@@ -7,7 +7,6 @@ import type { Bucket, Category } from '@/types'
 import Select from '@/components/ui/Select'
 import CalendarPopup from '@/components/ui/CalendarPopup'
 import AmountInput, { parseAmount } from '@/components/ui/AmountInput'
-import { useHouseholdId } from '@/hooks/useHouseholdId'
 import { notifyHousehold } from '@/lib/notify'
 
 function today() { return new Date().toISOString().split('T')[0] }
@@ -32,8 +31,6 @@ export default function TransakcijaForm({ onClose }: { onClose: () => void }) {
   const [categories, setCategories] = useState<Category[]>([])
   const [view, setView] = useState<'form' | 'calendar'>('form')
   const [currentMember, setCurrentMember] = useState<{ id: string; name: string } | null>(null)
-  const householdId = useHouseholdId()
-
   const supabase = createClient()
   const router = useRouter()
 
@@ -46,7 +43,7 @@ export default function TransakcijaForm({ onClose }: { onClose: () => void }) {
   }, [])
 
   useEffect(() => {
-    supabase.from('buckets').select('*').order('sort_order').then(({ data }) => {
+    supabase.from('buckets').select('*').order('name').then(({ data }) => {
       setBuckets(data ?? [])
       if (data?.[0]) setBucketId(data[0].id)
     })
@@ -64,28 +61,25 @@ export default function TransakcijaForm({ onClose }: { onClose: () => void }) {
   }, [bucketId, type])
 
   async function handleSubmit() {
-    if (!amount || !name.trim() || !householdId) return
+    if (!amount || !name.trim()) return
     if (type === 'rashod' && (!categoryId || !bucketId)) return
     setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
     const a = parseAmount(amount)
     await supabase.from('transactions').insert({
-      household_id: householdId,
       bucket_id: type === 'rashod' ? bucketId : null,
       category_id: type === 'rashod' ? categoryId : null,
       user_id: user!.id,
       type, amount: a, currency,
       date, month: date.slice(0, 7), name: name.trim(), note: note.trim() || null,
-      member_id: currentMember?.id ?? null,
     })
     const fmt = (n: number) => new Intl.NumberFormat('sr-Latn-RS').format(Math.round(n))
     const memberName = currentMember?.name ?? 'Neko'
     notifyHousehold({
-      householdId,
       triggeredByMemberId: currentMember?.id,
       type: type === 'rashod' ? 'transakcija_rashod' : 'transakcija_prihod',
-      title: memberName,
-      body: `${type === 'prihod' ? '+' : '-'}${fmt(a)} ${currency} · ${name.trim()}`,
+      title: type === 'rashod' ? 'Rashod' : 'Prihod',
+      body: `${memberName} · ${name.trim()} · ${type === 'prihod' ? '+' : '-'}${fmt(a)} ${currency}`,
     })
     setLoading(false); onClose(); router.refresh()
   }

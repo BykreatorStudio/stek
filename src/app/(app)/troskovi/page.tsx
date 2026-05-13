@@ -47,8 +47,8 @@ export default async function TroskoviPage({ searchParams }: { searchParams: Pro
     supabase.from('recurring_items').select('id, name, amount, currency, due_day, type, bucket_id, category_id').eq('is_active', true).order('due_day'),
     supabase.from('credits').select('id, name, monthly_payment, due_day, bucket_id, currency, original_amount, remaining_amount').eq('status', 'aktivan').order('due_day'),
     supabase.from('credit_payments').select('id, credit_id').gte('date', monthStart).lte('date', monthEnd),
-    supabase.from('checks').select('id, quantity, date, status, note').gte('date', monthStart).lte('date', monthEnd).order('date'),
-    supabase.from('debts').select('*').eq('status', 'aktivno'),
+    supabase.from('cekovi').select('id, quantity, date, status, note').gte('date', monthStart).lte('date', monthEnd).order('date'),
+    supabase.from('dugovi').select('*'),
     supabase.from('debt_payments').select('id, debt_id, amount, currency, date, note'),
     supabase.from('buckets').select('id, name'),
     supabase.from('transactions').select('id, name, amount, currency, date, note, categories(name), buckets(name)').eq('month', month).eq('type', 'rashod').is('recurring_item_id', null).order('date', { ascending: false }),
@@ -89,8 +89,14 @@ export default async function TroskoviPage({ searchParams }: { searchParams: Pro
   const debts = (debtsRaw ?? []).map((d: any) => {
     const payments = (debtPaysRaw ?? []).filter((p: any) => p.debt_id === d.id)
     const paid = payments.reduce((s: number, p: any) => s + p.amount, 0)
-    return { ...d, payments, paid, remaining: d.total_amount - paid }
+    return { ...d, payments, paid, remaining: Math.max(0, d.total_amount - paid) }
   })
+
+  const activeDebts = debts.filter((d: any) => d.status === 'aktivno')
+  const settledDebtsThisMonth = debts.filter((d: any) =>
+    d.status === 'izmireno' &&
+    d.payments.some((p: any) => p.date >= monthStart && p.date <= monthEnd)
+  )
 
   // --- Stats ---
   const allChecks = checks
@@ -101,22 +107,23 @@ export default async function TroskoviPage({ searchParams }: { searchParams: Pro
     recurring.reduce((s: number, r: any) => s + toRSD(r.amount ?? 0, r.currency), 0) +
     credits.reduce((s: number, c: any) => s + toRSD(c.monthly_payment, c.currency), 0) +
     allChecks.reduce((s: number, c: any) => s + c.quantity * CEK_VALUE, 0) +
-    debts.reduce((s: number, d: any) => s + toRSD(d.remaining, d.currency), 0) +
+    activeDebts.reduce((s: number, d: any) => s + toRSD(d.remaining, d.currency), 0) +
+    settledDebtsThisMonth.reduce((s: number, d: any) => s + toRSD(d.total_amount, d.currency), 0) +
     extraExpenses.reduce((s: number, e: any) => s + toRSD(e.amount, e.currency), 0)
 
   const remainingAmount =
     recurring.filter((r: any) => !r.paid).reduce((s: number, r: any) => s + toRSD(r.amount ?? 0, r.currency), 0) +
     credits.filter((c: any) => !c.paid).reduce((s: number, c: any) => s + toRSD(c.monthly_payment, c.currency), 0) +
     pendingChecks.reduce((s: number, c: any) => s + c.quantity * CEK_VALUE, 0) +
-    debts.reduce((s: number, d: any) => s + toRSD(d.remaining, d.currency), 0)
+    activeDebts.reduce((s: number, d: any) => s + toRSD(d.remaining, d.currency), 0)
 
   // Item count
   const paidCount =
     recurring.filter((r: any) => r.paid).length +
     credits.filter((c: any) => c.paid).length +
     paidChecks.length +
-    debts.filter((d: any) => d.remaining <= 0).length
-  const totalItems = recurring.length + credits.length + allChecks.length + debts.length
+    settledDebtsThisMonth.length
+  const totalItems = recurring.length + credits.length + allChecks.length + activeDebts.length + settledDebtsThisMonth.length
 
   const allResolved = totalItems > 0 && paidCount === totalItems
 
@@ -193,6 +200,8 @@ export default async function TroskoviPage({ searchParams }: { searchParams: Pro
           extraExpenses={extraExpenses}
           month={month}
           eurToRsd={eurToRsd}
+          monthStart={monthStart}
+          monthEnd={monthEnd}
         />
       </div>
     </div>

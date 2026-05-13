@@ -4,12 +4,6 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { Bucket } from '@/types'
-import { useHouseholdId } from '@/hooks/useHouseholdId'
-
-function slugify(name: string) {
-  return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '')
-}
-
 export default function GrupeClient({ buckets }: { buckets: Bucket[] }) {
   const [editing, setEditing] = useState<Bucket | null>(null)
   const [name, setName] = useState('')
@@ -17,7 +11,6 @@ export default function GrupeClient({ buckets }: { buckets: Bucket[] }) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const householdId = useHouseholdId()
   const supabase = createClient()
   const router = useRouter()
 
@@ -37,9 +30,7 @@ export default function GrupeClient({ buckets }: { buckets: Bucket[] }) {
     if (editing) {
       await supabase.from('buckets').update({ name: name.trim() }).eq('id', editing.id)
     } else {
-      if (!householdId) { setLoading(false); return }
-      const maxOrder = buckets.reduce((m, b) => Math.max(m, b.sort_order ?? 0), 0)
-      await supabase.from('buckets').insert({ household_id: householdId, name: name.trim(), slug: slugify(name.trim()), sort_order: maxOrder + 1 })
+      await supabase.from('buckets').insert({ name: name.trim() })
     }
     setLoading(false); closeForm(); router.refresh()
   }

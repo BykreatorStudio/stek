@@ -8,10 +8,23 @@ export default async function StednjaPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data } = await supabase.from('savings').select('*, member:members(id, name, color)').order('date', { ascending: false }).order('created_at', { ascending: false })
+  const { data: hm } = await supabase.from('household_members').select('household_id').eq('user_id', user.id).single()
+  const householdId = hm?.household_id ?? ''
 
-  const savings = data ?? []
-  const balance = savings.reduce((s: number, r: any) => s + r.amount, 0)
+  const [{ data: sefoviRaw }, { data: savingsRaw }] = await Promise.all([
+    supabase.from('sefovi').select('*').order('created_at', { ascending: true }),
+    supabase.from('savings').select('*, member:members(id, name, color)').order('date', { ascending: false }).order('created_at', { ascending: false }),
+  ])
+
+  const savings = savingsRaw ?? []
+  const sefovi = (sefoviRaw ?? []).map((s: any) => {
+    const items = savings.filter((r: any) => r.sef_id === s.id)
+    const balance = items.reduce((acc: number, r: any) => acc + r.amount, 0)
+    return { ...s, items, balance }
+  })
+
+  const totalBalance = sefovi.reduce((acc: number, s: any) => acc + s.balance, 0)
+  const hasItems = sefovi.some((s: any) => s.items.length > 0)
 
   return (
     <div>
@@ -23,22 +36,22 @@ export default async function StednjaPage() {
                 <polyline points="15 18 9 12 15 6" />
               </svg>
             </Link>
-            <p style={{ fontSize: 18, fontWeight: 500, color: 'var(--header-text)' }}>Sef</p>
+            <p style={{ fontSize: 18, fontWeight: 500, color: 'var(--header-text)' }}>Štednja</p>
           </div>
 
-          <p style={{ fontSize: 12, color: 'var(--header-muted)', marginBottom: 6 }}>Trenutno stanje</p>
+          <p style={{ fontSize: 12, color: 'var(--header-muted)', marginBottom: 6 }}>Ukupno</p>
           <p className="num" style={{
             fontSize: 44, fontWeight: 500, lineHeight: 1,
-            color: balance > 0 ? 'var(--accent-on-dark)' : balance < 0 ? '#f87171' : 'var(--header-muted)',
+            color: hasItems ? 'var(--accent-on-dark)' : 'var(--header-muted)',
           }}>
-            {savings.length > 0 ? new Intl.NumberFormat('sr-Latn-RS').format(Math.round(Math.abs(balance))) : '—'}
-            {savings.length > 0 && <span style={{ fontSize: 20, color: 'var(--header-muted)', fontWeight: 400, marginLeft: 8 }}>RSD</span>}
+            {hasItems ? new Intl.NumberFormat('sr-Latn-RS').format(Math.round(Math.abs(totalBalance))) : '—'}
+            {hasItems && <span style={{ fontSize: 20, color: 'var(--header-muted)', fontWeight: 400, marginLeft: 8 }}>RSD</span>}
           </p>
         </div>
       </div>
 
       <div style={{ maxWidth: 520, margin: '0 auto', padding: '20px 16px' }}>
-        <StednjaClient savings={savings} balance={balance} />
+        <StednjaClient sefovi={sefovi} />
       </div>
     </div>
   )

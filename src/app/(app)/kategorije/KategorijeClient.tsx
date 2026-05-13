@@ -5,8 +5,6 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { Bucket, Category } from '@/types'
 import Select from '@/components/ui/Select'
-import { useHouseholdId } from '@/hooks/useHouseholdId'
-
 export default function KategorijeClient({ buckets, categories }: { buckets: Bucket[], categories: Category[] }) {
   const [showForm, setShowForm] = useState(false)
   const [editingCat, setEditingCat] = useState<Category | null>(null)
@@ -17,7 +15,6 @@ export default function KategorijeClient({ buckets, categories }: { buckets: Buc
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const householdId = useHouseholdId()
   const supabase = createClient()
   const router = useRouter()
 
@@ -44,8 +41,7 @@ export default function KategorijeClient({ buckets, categories }: { buckets: Buc
     if (editingCat) {
       await supabase.from('categories').update({ name: catName.trim(), type: catType, currency_default: catCurrency, bucket_id: catBucketId }).eq('id', editingCat.id)
     } else {
-      if (!householdId) { setLoading(false); return }
-      await supabase.from('categories').insert({ household_id: householdId, bucket_id: catBucketId, name: catName.trim(), type: catType, currency_default: catCurrency })
+      await supabase.from('categories').insert({ bucket_id: catBucketId, name: catName.trim(), type: catType, currency_default: catCurrency })
     }
     setLoading(false); closeForm(); router.refresh()
   }

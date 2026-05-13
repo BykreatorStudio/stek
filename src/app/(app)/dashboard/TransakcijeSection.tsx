@@ -43,8 +43,8 @@ export default function TransakcijeSection({ recentTxs }: { recentTxs: any[] }) 
       setLoading(true)
       const { data } = await supabase
         .from('transactions')
-        .select('id, type, name, amount, currency, date')
-        .order('date', { ascending: false })
+        .select('id, type, name, amount, currency, date, created_at')
+        .order('created_at', { ascending: false })
       setAllTxs(data ?? [])
       setLoading(false)
     }

@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { notifyHousehold } from '@/lib/notify'
-import { useHouseholdId } from '@/hooks/useHouseholdId'
 import CalendarPopup from '@/components/ui/CalendarPopup'
 import Select from '@/components/ui/Select'
 import AmountInput, { parseAmount } from '@/components/ui/AmountInput'
+import SwipeActions from '@/components/ui/SwipeActions'
+import EditAmountSheet from '@/components/ui/EditAmountSheet'
 
 type Bucket = { id: string; name: string }
 type Payment = { id: string; amount: number; date: string }
@@ -57,9 +58,17 @@ function KreditModal({ credit, onClose }: { credit: Credit; onClose: () => void 
   const [view, setView] = useState<'main' | 'calendar'>('main')
   const [payDate, setPayDate] = useState(today())
   const [loading, setLoading] = useState(false)
+  const [currentMember, setCurrentMember] = useState<{ id: string; name: string } | null>(null)
   const supabase = createClient()
   const router = useRouter()
-  const householdId = useHouseholdId()
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      supabase.from('members').select('id, name').eq('user_id', user.id).single()
+        .then(({ data }) => { if (data) setCurrentMember(data) })
+    })
+  }, [])
 
   const pct = credit.original_amount > 0
     ? Math.min(100, Math.round(((credit.original_amount - credit.remaining_amount) / credit.original_amount) * 100))
@@ -73,15 +82,13 @@ function KreditModal({ credit, onClose }: { credit: Credit; onClose: () => void 
       remaining_amount: newRemaining,
       ...(newRemaining <= 0 ? { status: 'zatvoren' } : {}),
     }).eq('id', credit.id)
-    if (householdId) {
-      const fmt = (n: number) => new Intl.NumberFormat('sr-Latn-RS').format(Math.round(n))
-      notifyHousehold({
-        householdId,
-        type: 'kredit_placen',
-        title: 'Rata plaćena',
-        body: `${credit.name} · ${fmt(credit.monthly_payment)} ${credit.currency}`,
-      })
-    }
+    const fmtN = (n: number) => new Intl.NumberFormat('sr-Latn-RS').format(Math.round(n))
+    notifyHousehold({
+      triggeredByMemberId: currentMember?.id,
+      type: 'kredit_placen',
+      title: 'Rata plaćena',
+      body: `${currentMember?.name ?? 'Neko'} · ${credit.name} · ${fmtN(credit.monthly_payment)} ${credit.currency}`,
+    })
     setLoading(false)
     onClose()
     router.refresh()
@@ -182,8 +189,17 @@ function AddKreditModal({ buckets, onClose }: { buckets: Bucket[]; onClose: () =
   const [bucketId, setBucketId] = useState(buckets[0]?.id ?? '')
   const [note, setNote] = useState('')
   const [loading, setLoading] = useState(false)
+  const [currentMember, setCurrentMember] = useState<{ id: string; name: string } | null>(null)
   const supabase = createClient()
   const router = useRouter()
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      supabase.from('members').select('id, name').eq('user_id', user.id).single()
+        .then(({ data }) => { if (data) setCurrentMember(data) })
+    })
+  }, [])
 
   async function handleSave() {
     const r = parseAmount(rata)
@@ -199,6 +215,13 @@ function AddKreditModal({ buckets, onClose }: { buckets: Bucket[]; onClose: () =
       currency: 'RSD',
       bucket_id: bucketId,
       note: note.trim() || null,
+    })
+    const fmtN = (n: number) => new Intl.NumberFormat('sr-Latn-RS').format(Math.round(n))
+    notifyHousehold({
+      triggeredByMemberId: currentMember?.id,
+      type: 'kredit_dodat',
+      title: 'Novi kredit',
+      body: `${currentMember?.name ?? 'Neko'} · ${name.trim()} · ${fmtN(rem)} RSD`,
     })
     setLoading(false)
     onClose()
@@ -287,34 +310,86 @@ function AddKreditModal({ buckets, onClose }: { buckets: Bucket[]; onClose: () =
 }
 
 function KreditCard({ credit, onOpen }: { credit: Credit; onOpen: () => void }) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [editAmount, setEditAmount] = useState(false)
+  const supabase = createClient()
+  const router = useRouter()
+
   const pct = credit.original_amount > 0
     ? Math.min(100, Math.round(((credit.original_amount - credit.remaining_amount) / credit.original_amount) * 100))
     : 0
 
+  async function handleDelete() {
+    await supabase.from('credits').delete().eq('id', credit.id)
+    setConfirmDelete(false)
+    router.refresh()
+  }
+
   return (
-    <div className="card" style={{ padding: '16px 20px', marginBottom: 8, cursor: 'pointer' }} onClick={onOpen}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-        <div>
-          <p style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-1)', marginBottom: 3 }}>{credit.name}</p>
-          <p style={{ fontSize: 12, color: 'var(--text-3)' }}>
-            {fmt(credit.monthly_payment)} RSD/mes · {credit.due_day}. u mesecu
-          </p>
+    <>
+      <SwipeActions
+        onTap={onOpen}
+        tapLabel="Otvori"
+        actions={[
+          { label: 'Izmeni', color: 'neutral', onClick: () => setEditAmount(true) },
+          { label: 'Obriši', color: 'danger', onClick: () => setConfirmDelete(true) },
+        ]}
+        style={{ marginBottom: 8 }}
+      >
+        <div style={{ padding: '16px 20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+            <div>
+              <p style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-1)', marginBottom: 3 }}>{credit.name}</p>
+              <p style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                {fmt(credit.monthly_payment)} RSD/mes · {credit.due_day}. u mesecu
+              </p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <p className="num" style={{ fontSize: 16, fontWeight: 500, color: '#f87171', marginBottom: 2 }}>
+                {fmt(credit.remaining_amount)}
+                <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 3, opacity: 0.6 }}>RSD</span>
+              </p>
+              <p style={{ fontSize: 11, fontWeight: 500, color: credit.paidThisMonth ? 'var(--accent)' : 'var(--red)' }}>
+                {credit.paidThisMonth ? 'Plaćeno' : 'Na čekanju'}
+              </p>
+            </div>
+          </div>
+          <div style={{ height: 4, borderRadius: 4, background: 'var(--border-2)' }}>
+            <div style={{ height: '100%', borderRadius: 4, background: 'var(--accent)', width: `${pct}%`, transition: 'width 0.3s' }} />
+          </div>
+          {credit.note && <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8 }}>{credit.note}</p>}
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <p className="num" style={{ fontSize: 16, fontWeight: 500, color: '#f87171', marginBottom: 2 }}>
-            {fmt(credit.remaining_amount)}
-            <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 3, opacity: 0.6 }}>RSD</span>
-          </p>
-          <p style={{ fontSize: 11, fontWeight: 500, color: credit.paidThisMonth ? 'var(--accent)' : 'var(--red)' }}>
-            {credit.paidThisMonth ? 'Plaćeno' : 'Na čekanju'}
-          </p>
+      </SwipeActions>
+
+      {editAmount && (
+        <EditAmountSheet
+          title={`Rata — ${credit.name}`}
+          current={credit.monthly_payment}
+          onSave={async a => {
+            await supabase.from('credits').update({ monthly_payment: a }).eq('id', credit.id)
+            setEditAmount(false)
+            router.refresh()
+          }}
+          onClose={() => setEditAmount(false)}
+        />
+      )}
+
+      {confirmDelete && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)', padding: '0 24px' }}
+          onClick={() => setConfirmDelete(false)}
+        >
+          <div style={{ width: '100%', maxWidth: 340, background: 'var(--card)', borderRadius: 20, padding: '24px 20px' }} onClick={e => e.stopPropagation()}>
+            <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-1)', marginBottom: 8 }}>Obriši kredit?</p>
+            <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 20 }}>Kredit i sve uplate biće trajno obrisani.</p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirmDelete(false)} style={{ flex: 1, padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500, border: '1.5px solid var(--border)', background: 'var(--card)', color: 'var(--text-2)', cursor: 'pointer' }}>Otkaži</button>
+              <button onClick={handleDelete} style={{ flex: 1, padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500, border: 'none', background: 'var(--red)', color: '#fff', cursor: 'pointer' }}>Obriši</button>
+            </div>
+          </div>
         </div>
-      </div>
-      <div style={{ height: 4, borderRadius: 4, background: 'var(--border-2)' }}>
-        <div style={{ height: '100%', borderRadius: 4, background: 'var(--accent)', width: `${pct}%`, transition: 'width 0.3s' }} />
-      </div>
-      {credit.note && <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 8 }}>{credit.note}</p>}
-    </div>
+      )}
+    </>
   )
 }
 

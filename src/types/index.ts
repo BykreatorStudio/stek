@@ -6,6 +6,7 @@ export interface Member {
   color: string
   avatar_url: string | null
   sort_order: number
+  user_id: string | null
   created_at: string
 }
 export type TransactionType = 'prihod' | 'rashod'

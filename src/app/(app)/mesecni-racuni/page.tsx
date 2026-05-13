@@ -6,7 +6,7 @@ export default async function MesecniRacuniPage() {
   const supabase = await createClient()
 
   const [{ data: bucketsRaw }, { data: categories }, { data: items }] = await Promise.all([
-    supabase.from('buckets').select('*').order('sort_order'),
+    supabase.from('buckets').select('*').order('name'),
     supabase.from('categories').select('*').eq('type', 'rashod').eq('is_active', true).order('name'),
     supabase.from('recurring_items').select('*, bucket:buckets(name), category:categories(name)').eq('is_active', true).order('due_day'),
   ])

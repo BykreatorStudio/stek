@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { Member } from '@/types'
 import { useHouseholdId } from '@/hooks/useHouseholdId'
+import SwipeActions from '@/components/ui/SwipeActions'
 
 function generateCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -129,7 +130,94 @@ function InviteModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-export default function ClanoviClient({ members }: { members: Member[] }) {
+function RemoveMemberModal({ member, onClose, onConfirm }: { member: Member; onClose: () => void; onConfirm: () => Promise<void> }) {
+  const [loading, setLoading] = useState(false)
+
+  async function handle() {
+    setLoading(true)
+    await onConfirm()
+    setLoading(false)
+  }
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', padding: '0 24px' }}
+      onClick={onClose}
+    >
+      <div style={{ width: '100%', maxWidth: 360, background: 'var(--card)', borderRadius: 24, padding: '28px 24px' }} onClick={e => e.stopPropagation()}>
+        <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-1)', marginBottom: 8 }}>Ukloni člana?</p>
+        <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 24 }}>
+          {member.name} više neće imati pristup zajedničkim finansijama. Ova akcija se ne može vratiti.
+        </p>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '13px', borderRadius: 14, fontSize: 14, border: '1.5px solid var(--border-2)', background: 'transparent', cursor: 'pointer', color: 'var(--text-3)', fontFamily: 'inherit' }}>Otkaži</button>
+          <button onClick={handle} disabled={loading} style={{ flex: 1, padding: '13px', borderRadius: 14, fontSize: 14, fontWeight: 500, border: 'none', background: 'var(--red)', cursor: 'pointer', color: '#fff', fontFamily: 'inherit' }}>
+            {loading ? 'Uklanjanje...' : 'Ukloni'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LeaveModal({ onClose }: { onClose: () => void }) {
+  const [email, setEmail] = useState('')
+  const [userEmail, setUserEmail] = useState('')
+  const [loading, setLoading] = useState(false)
+  const supabase = createClient()
+  const router = useRouter()
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user?.email) setUserEmail(user.email)
+    })
+  }, [])
+
+  async function handleLeave() {
+    setLoading(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setLoading(false); return }
+    await supabase.from('household_members').delete().eq('user_id', user.id)
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
+  const emailMatch = email.trim().toLowerCase() === userEmail.toLowerCase()
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', padding: '0 24px' }}
+      onClick={onClose}
+    >
+      <div style={{ width: '100%', maxWidth: 360, background: 'var(--card)', borderRadius: 24, padding: '28px 24px' }} onClick={e => e.stopPropagation()}>
+        <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-1)', marginBottom: 8 }}>Napusti zajedničku štednju?</p>
+        <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 20, lineHeight: 1.5 }}>
+          Izgubićete pristup svim podacima — troškovima, štednji, pozajmicama i svemu ostalom. Ova akcija se ne može vratiti.
+        </p>
+        <input
+          type="email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          placeholder="Unesite vaš email za potvrdu"
+          style={{
+            width: '100%', padding: '13px 16px', fontSize: 14,
+            color: 'var(--text-1)', border: '1.5px solid var(--border)',
+            borderRadius: 12, background: 'var(--bg-subtle)',
+            outline: 'none', fontFamily: 'inherit', marginBottom: 16,
+          }}
+        />
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '13px', borderRadius: 14, fontSize: 14, border: '1.5px solid var(--border-2)', background: 'transparent', cursor: 'pointer', color: 'var(--text-3)', fontFamily: 'inherit' }}>Otkaži</button>
+          <button onClick={handleLeave} disabled={loading || !emailMatch} style={{ flex: 1, padding: '13px', borderRadius: 14, fontSize: 14, fontWeight: 500, border: 'none', background: emailMatch ? 'var(--red)' : 'var(--border-2)', cursor: emailMatch ? 'pointer' : 'default', color: emailMatch ? '#fff' : 'var(--text-3)', fontFamily: 'inherit', transition: 'background 0.15s' }}>
+            {loading ? 'Izlaz...' : 'Napusti'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function ClanoviClient({ members, currentUserId, currentUserRole }: { members: Member[]; currentUserId: string; currentUserRole: string }) {
   const [editing, setEditing] = useState<Member | null>(null)
   const [name, setName] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
@@ -137,8 +225,9 @@ export default function ClanoviClient({ members }: { members: Member[] }) {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [removeMember, setRemoveMember] = useState<Member | null>(null)
+  const [showLeave, setShowLeave] = useState(false)
 
   const fileRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
@@ -195,13 +284,18 @@ export default function ClanoviClient({ members }: { members: Member[] }) {
     setLoading(false); closeForm(); router.refresh()
   }
 
-  async function handleDelete(id: string) {
-    await supabase.storage.from('member-avatars').remove([`${id}.jpg`, `${id}.jpeg`, `${id}.png`, `${id}.webp`])
-    await supabase.from('members').delete().eq('id', id)
-    setConfirmDeleteId(null); router.refresh()
-  }
-
   const previewName = name || editing?.name || '?'
+  const isOwner = currentUserRole === 'owner'
+
+  async function handleRemoveMember(member: Member) {
+    const { error } = await supabase.from('members').delete().eq('id', member.id)
+    if (error) { console.error('remove member error:', error); return }
+    if (member.user_id) {
+      await supabase.from('household_members').delete().eq('user_id', member.user_id)
+    }
+    setRemoveMember(null)
+    router.refresh()
+  }
 
   return (
     <>
@@ -209,45 +303,69 @@ export default function ClanoviClient({ members }: { members: Member[] }) {
         <p className="section-label">Članovi</p>
 
         {members.length > 0 && (
-          <div className="card" style={{ overflow: 'hidden', marginBottom: 12 }}>
-            {members.map((m, i) => (
-              <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: i < members.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <Avatar member={m} size={40} />
-                  <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)' }}>{m.name}</p>
-                </div>
-                <div style={{ display: 'flex', gap: 20 }}>
-                  <button onClick={() => openEdit(m)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--accent)' }}>Izmeni</button>
-                  <button onClick={() => setConfirmDeleteId(m.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--red)' }}>Obriši</button>
-                </div>
-              </div>
-            ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+            {members.map(m => {
+              const isMe = m.user_id === currentUserId
+              const canRemove = isOwner && !isMe
+              return (
+                <SwipeActions
+                  key={m.id}
+                  actions={canRemove ? [{ label: 'Ukloni', color: 'danger', onClick: () => setRemoveMember(m) }] : []}
+                  onTap={isMe ? () => openEdit(m) : undefined}
+                  tapLabel="Izmeni"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                      <Avatar member={m} size={40} />
+                      <div>
+                        <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)' }}>{m.name}</p>
+                        {isMe && <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>Vi</p>}
+                        {isOwner && !isMe && <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>Član</p>}
+                      </div>
+                    </div>
+                    {isMe && (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                      </svg>
+                    )}
+                  </div>
+                </SwipeActions>
+              )
+            })}
           </div>
         )}
 
       </div>
 
-      <div style={{ position: 'fixed', bottom: 'calc(var(--nav-height) + var(--safe-bottom) + 16px)', left: 0, right: 0, padding: '0 16px', maxWidth: 540, margin: '0 auto' }}>
-        <button onClick={() => setShowInvite(true)} className="btn-primary" style={{ boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}>
-          Dodaj člana
-        </button>
+      <div style={{ position: 'fixed', bottom: 'calc(var(--nav-height) + var(--safe-bottom) + 16px)', left: 0, right: 0, padding: '0 16px', maxWidth: 540, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {!isOwner && (
+          <button
+            onClick={() => setShowLeave(true)}
+            style={{
+              width: '100%', padding: '14px', borderRadius: 16, fontSize: 14, fontWeight: 500,
+              border: '1.5px solid var(--red)', background: 'transparent',
+              cursor: 'pointer', color: 'var(--red)', fontFamily: 'inherit',
+            }}
+          >
+            Napusti
+          </button>
+        )}
+        {isOwner && (
+          <button onClick={() => setShowInvite(true)} className="btn-primary" style={{ boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}>
+            Dodaj člana
+          </button>
+        )}
       </div>
 
       {showInvite && <InviteModal onClose={() => setShowInvite(false)} />}
-
-      {confirmDeleteId && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)', padding: '0 24px' }}
-          onClick={() => setConfirmDeleteId(null)}>
-          <div style={{ width: '100%', maxWidth: 340, background: 'var(--card)', borderRadius: 20, padding: '24px 20px' }} onClick={e => e.stopPropagation()}>
-            <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-1)', marginBottom: 8 }}>Obriši člana?</p>
-            <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 20 }}>Transakcije ostaju, ali više neće biti označene ovim članom.</p>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setConfirmDeleteId(null)} style={{ flex: 1, padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500, border: '1.5px solid var(--border)', background: 'var(--card)', color: 'var(--text-2)', cursor: 'pointer' }}>Otkaži</button>
-              <button onClick={() => handleDelete(confirmDeleteId)} style={{ flex: 1, padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500, border: 'none', background: 'var(--red)', color: '#fff', cursor: 'pointer' }}>Obriši</button>
-            </div>
-          </div>
-        </div>
+      {removeMember && (
+        <RemoveMemberModal
+          member={removeMember}
+          onClose={() => setRemoveMember(null)}
+          onConfirm={() => handleRemoveMember(removeMember)}
+        />
       )}
+      {showLeave && <LeaveModal onClose={() => setShowLeave(false)} />}
 
       {showForm && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(6px)' }}

@@ -1,24 +1,76 @@
 'use client'
 import Link from 'next/link'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { usePushSubscription } from '@/hooks/usePushSubscription'
 
 export default function NotifBell() {
   const [count, setCount] = useState(0)
-  const supabase = createClient()
+  const memberIdRef = useRef<string | null>(null)
   usePushSubscription()
 
   useEffect(() => {
-    async function load() {
-      const { data } = await supabase.rpc('get_my_unread_notification_count')
-      setCount(data ?? 0)
-    }
-    load()
+    const supabase = createClient()
+    let channel: ReturnType<typeof supabase.channel> | null = null
+    let mounted = true
+    let removeListener: (() => void) | undefined
 
-    const handleFocus = () => load()
-    window.addEventListener('focus', handleFocus)
-    return () => window.removeEventListener('focus', handleFocus)
+    async function setup() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user || !mounted) return
+
+      const [{ data: member }, { data: hm }] = await Promise.all([
+        supabase.from('members').select('id').eq('user_id', user.id).single(),
+        supabase.from('household_members').select('household_id').eq('user_id', user.id).single(),
+      ])
+      if (!mounted) return
+
+      memberIdRef.current = member?.id ?? null
+      const userId = user.id
+      const memberId = member?.id ?? null
+      const householdId = hm?.household_id ?? null
+
+      async function refreshCount() {
+        let q = supabase
+          .from('notifications')
+          .select('id', { count: 'exact', head: true })
+          .not('read_by', 'cs', `{${userId}}`)
+        if (memberId) q = q.or(`triggered_by_member_id.is.null,triggered_by_member_id.neq.${memberId}`)
+        const { count: c } = await q
+        if (mounted) setCount(c ?? 0)
+      }
+
+      await refreshCount()
+
+      const handleFocus = () => refreshCount()
+      window.addEventListener('focus', handleFocus)
+      removeListener = () => window.removeEventListener('focus', handleFocus)
+
+      if (!householdId) return
+
+      channel = supabase
+        .channel(`bell-${householdId}`)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `household_id=eq.${householdId}`,
+        }, (payload: any) => {
+          if (!mounted) return
+          if (payload.new.triggered_by_member_id !== memberIdRef.current) {
+            setCount(c => c + 1)
+          }
+        })
+        .subscribe()
+    }
+
+    setup()
+
+    return () => {
+      mounted = false
+      removeListener?.()
+      if (channel) supabase.removeChannel(channel)
+    }
   }, [])
 
   return (

@@ -6,14 +6,49 @@ import { useState } from 'react'
 import TransakcijaForm from '@/components/forms/TransakcijaForm'
 import CekForm from '@/components/forms/CekForm'
 
-const navLeft = [
-  { href: '/dashboard', label: 'Početna', icon: 'M3 11L12 4l9 7M5 10v11h5v-6h4v6h5V10' },
-  { href: '/troskovi', label: 'Troškovi', icon: 'M14 2H6a2 2 0 00-2 2v16l4-2 4 2 4-2 4 2V4a2 2 0 00-2-2zM9 9h6M9 13h6M9 17h3' },
+type NavItemDef = { href: string; label: string; icon: (active: boolean) => React.ReactNode }
+
+const navLeft: NavItemDef[] = [
+  {
+    href: '/dashboard',
+    label: 'Početna',
+    icon: (active) => (
+      <svg width="22" height="22" viewBox="0 0 36.31 40" fill={active ? 'var(--accent)' : '#c0c0c0'}>
+        <path d="M3.4,36.6h8.51v-12.48c0-.48.16-.89.49-1.21.33-.33.73-.49,1.21-.49h9.08c.48,0,.89.16,1.21.49.33.33.49.73.49,1.21v12.48h8.51V14.47L18.16,3.4,3.4,14.47v22.13ZM0,36.6V14.47c0-.54.12-1.05.36-1.53.24-.48.57-.88,1-1.19L16.11.68c.59-.45,1.27-.68,2.03-.68s1.45.23,2.05.68l14.75,11.06c.43.31.76.71,1,1.19.24.48.36.99.36,1.53v22.13c0,.94-.33,1.74-1,2.4-.67.67-1.47,1-2.4,1h-10.21c-.48,0-.89-.16-1.21-.49-.33-.33-.49-.73-.49-1.21v-12.48h-5.67v12.48c0,.48-.16.89-.49,1.21s-.73.49-1.21.49H3.4c-.94,0-1.74-.33-2.4-1-.67-.67-1-1.47-1-2.4Z" />
+      </svg>
+    ),
+  },
+  {
+    href: '/troskovi',
+    label: 'Troškovi',
+    icon: (active) => (
+      <svg width="22" height="22" viewBox="0 0 31.27 39.34" fill="none" stroke={active ? 'var(--accent)' : '#c0c0c0'} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M19.66,1.5v8.06c0,1.11.9,2.02,2.02,2.02h8.06" />
+        <path d="M29.74,19.64v14.11c.25,1.97-1.15,3.76-3.11,4.01-1.18.15-2.35-.3-3.13-1.18-1.13-1.45-3.22-1.7-4.67-.57-.21.17-.41.36-.57.57-1.13,1.45-3.22,1.7-4.67.57-.21-.17-.41-.36-.57-.57-1.13-1.45-3.22-1.7-4.67.57-.21.17-.41.36-.57.57-1.31,1.48-3.58,1.62-5.06.31-.89-.78-1.33-1.96-1.18-3.13V5.53C1.53,3.3,3.33,1.5,5.56,1.5h14.11l10.08,10.08v8.56" />
+      </svg>
+    ),
+  },
 ]
 
-const navRight = [
-  { href: '/cekovi', label: 'Čekovi', icon: 'M2 7h20v10H2zM7 7v10M10 11h7M10 14h4' },
-  { href: '/vise', label: 'Više', icon: 'M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z' },
+const navRight: NavItemDef[] = [
+  {
+    href: '/stednja',
+    label: 'Štednja',
+    icon: (active) => (
+      <svg width="22" height="22" viewBox="0 0 40 38" fill={active ? 'var(--accent)' : '#c0c0c0'}>
+        <path d="M7.5,38c-.7,0-1.36-.23-1.97-.7-.62-.47-1.02-1.03-1.23-1.7-.83-2.87-1.53-5.34-2.08-7.42-.55-2.08-.99-3.91-1.32-5.48-.33-1.57-.56-2.97-.7-4.19-.14-1.22-.21-2.39-.21-3.5,0-3.07,1.07-5.67,3.2-7.8,2.13-2.13,4.73-3.2,7.8-3.2h10c.9-1.2,2.04-2.17,3.42-2.9,1.38-.73,2.91-1.1,4.58-1.1.83,0,1.54.29,2.12.88s.88,1.29.88,2.12c0,.2-.03.4-.08.6s-.11.38-.17.55c-.13.37-.26.73-.38,1.1-.12.37-.21.77-.28,1.2l4.55,4.55h2.85c.42,0,.78.14,1.07.43.29.29.43.64.43,1.07v11.35c0,.34-.09.64-.28.91-.18.26-.44.44-.78.54l-4.6,1.51-2.7,9.03c-.2.65-.56,1.18-1.09,1.57-.53.39-1.13.58-1.81.58h-5.75c-.83,0-1.53-.29-2.12-.88-.59-.59-.88-1.29-.88-2.12v-1h-4v1c0,.83-.29,1.53-.88,2.12-.59.59-1.29.88-2.12.88h-5.5ZM7.25,35h5.75v-4h10v4h5.75l3.15-10.5,5.1-1.75v-8.75h-2.6l-6.4-6.4c.03-.57.12-1.26.28-2.07.15-.82.36-1.72.62-2.72-1.43.37-2.7.92-3.8,1.65-1.1.73-1.9,1.58-2.4,2.55h-11.7c-2.21,0-4.1.78-5.66,2.34-1.56,1.56-2.34,3.45-2.34,5.66,0,1.4.37,3.84,1.1,7.33.73,3.48,1.78,7.71,3.15,12.67ZM28,18c.57,0,1.04-.19,1.42-.58s.58-.86.58-1.42-.19-1.04-.58-1.42-.86-.58-1.42-.58-1.04.19-1.42.58-.58.86-.58,1.42.19,1.04.58,1.42.86.58,1.42.58ZM20.5,13c.42,0,.78-.14,1.07-.43.29-.29.43-.65.43-1.07s-.14-.78-.43-1.07c-.29-.28-.64-.43-1.07-.43h-7c-.42,0-.78.14-1.07.43-.29.29-.43.65-.43,1.07s.14.78.43,1.07c.29.28.64.42,1.07.42h7Z" />
+      </svg>
+    ),
+  },
+  {
+    href: '/vise',
+    label: 'Više',
+    icon: (active) => (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? 'var(--accent)' : '#c0c0c0'} strokeWidth={active ? 2 : 1.6} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
+      </svg>
+    ),
+  },
 ]
 
 type Mode = null | 'picker' | 'transakcija' | 'cek'
@@ -33,7 +68,7 @@ const PICKER_OPTIONS = [
   },
 ]
 
-function NavItem({ href, label, icon }: { href: string; label: string; icon: string }) {
+function NavItem({ href, label, icon }: NavItemDef) {
   const pathname = usePathname()
   const active = href === '/dashboard'
     ? pathname === '/dashboard' || pathname === '/'
@@ -45,12 +80,7 @@ function NavItem({ href, label, icon }: { href: string; label: string; icon: str
       alignItems: 'center', justifyContent: 'center', gap: 4,
       textDecoration: 'none',
     }}>
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
-        stroke={active ? 'var(--accent)' : '#c0c0c0'}
-        strokeWidth={active ? 2 : 1.6}
-        strokeLinecap="round" strokeLinejoin="round">
-        <path d={icon} />
-      </svg>
+      {icon(active)}
       <span style={{ fontSize: 10, fontWeight: active ? 500 : 400, color: active ? 'var(--accent)' : '#c0c0c0' }}>
         {label}
       </span>

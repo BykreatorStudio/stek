@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 type Notif = {
@@ -45,14 +45,16 @@ function groupByDate(notifications: Notif[]) {
 
 function typeIcon(type: string) {
   const icons: Record<string, { d: string; color: string; bg: string }> = {
-    transakcija_rashod: { d: 'M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2zm7 5v4m0 4h.01', color: '#d93025', bg: 'rgba(217,48,37,0.1)' },
+    transakcija_rashod: { d: 'M12 5v14M19 12l-7 7-7-7', color: '#d93025', bg: 'rgba(217,48,37,0.1)' },
     transakcija_prihod: { d: 'M12 19V5M5 12l7-7 7 7', color: '#5a9700', bg: '#edf6d0' },
     sef_uplata:         { d: 'M12 19V5M5 12l7-7 7 7', color: '#5a9700', bg: '#edf6d0' },
     sef_isplata:        { d: 'M12 5v14M19 12l-7 7-7-7', color: '#d93025', bg: 'rgba(217,48,37,0.1)' },
     cek:                { d: 'M2 7h20v10H2zM7 7v10M10 11h7M10 14h4', color: '#0f766e', bg: 'rgba(15,118,110,0.1)' },
     dug_dodat:          { d: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z', color: '#d93025', bg: 'rgba(217,48,37,0.1)' },
     dug_placen:         { d: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', color: '#5a9700', bg: '#edf6d0' },
+    dug_izmiren:        { d: 'M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z', color: '#5a9700', bg: '#edf6d0' },
     kredit_placen:      { d: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z', color: '#5a9700', bg: '#edf6d0' },
+    kredit_dodat:       { d: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z', color: '#0f766e', bg: 'rgba(15,118,110,0.1)' },
     racun_placen:       { d: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', color: '#5a9700', bg: '#edf6d0' },
     racun_upcoming:     { d: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z', color: '#b45309', bg: 'rgba(180,83,9,0.1)' },
     racun_overdue:      { d: 'M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z', color: '#d93025', bg: 'rgba(217,48,37,0.1)' },
@@ -62,48 +64,116 @@ function typeIcon(type: string) {
 
 export default function NotifikacijePage() {
   const [notifications, setNotifications] = useState<Notif[]>([])
-  const [memberId, setMemberId] = useState<string | null>(null)
+  const [myMemberId, setMyMemberId] = useState<string | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [householdId, setHouseholdId] = useState<string | null>(null)
+  const currentUserIdRef = useRef<string | null>(null)
+  const myMemberIdRef = useRef<string | null>(null)
   const supabase = createClient()
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
+      currentUserIdRef.current = user.id
+      setCurrentUserId(user.id)
 
-      const [{ data: member }, { data: hm }] = await Promise.all([
+      const [{ data: member }, { data: hm }, { data: notifs }] = await Promise.all([
         supabase.from('members').select('id').eq('user_id', user.id).single(),
         supabase.from('household_members').select('household_id').eq('user_id', user.id).single(),
+        supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(100),
       ])
 
-      if (!member || !hm) return
-      setMemberId(member.id)
-
-      const { data: notifs } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('household_id', hm.household_id)
-        .order('created_at', { ascending: false })
-        .limit(100)
-
+      if (member) {
+        myMemberIdRef.current = member.id
+        setMyMemberId(member.id)
+      }
+      if (hm) setHouseholdId(hm.household_id)
       setNotifications(notifs ?? [])
       setLoading(false)
 
-      await supabase.rpc('mark_notifications_read', {
-        p_household_id: hm.household_id,
-        p_member_id: member.id,
-      })
+      supabase.rpc('mark_all_notifications_read', { p_user_id: user.id }).then(() => {})
     }
     load()
   }, [])
 
+  useEffect(() => {
+    if (!householdId) return
+
+    const channel = supabase
+      .channel(`notifs-page-${householdId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+        filter: `household_id=eq.${householdId}`,
+      }, async (payload: any) => {
+        const notif = payload.new as Notif
+        setNotifications(prev => [{ ...notif, read_by: notif.read_by ?? [] }, ...prev])
+
+        const uid = currentUserIdRef.current
+        if (uid) {
+          await supabase.rpc('mark_notification_read', { p_notification_id: notif.id, p_user_id: uid })
+          setNotifications(prev => prev.map(n =>
+            n.id === notif.id ? { ...n, read_by: [...(n.read_by ?? []), uid] } : n
+          ))
+        }
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [householdId])
+
+  async function markAllRead() {
+    if (!currentUserId) return
+    await supabase.rpc('mark_all_notifications_read', { p_user_id: currentUserId })
+    setNotifications(prev => prev.map(n => ({
+      ...n,
+      read_by: n.read_by?.includes(currentUserId) ? n.read_by : [...(n.read_by ?? []), currentUserId],
+    })))
+  }
+
+  async function toggleRead(notif: Notif) {
+    if (!currentUserId) return
+    const isRead = (notif.read_by ?? []).includes(currentUserId)
+    if (isRead) {
+      await supabase.rpc('mark_notification_unread', { p_notification_id: notif.id, p_user_id: currentUserId })
+      setNotifications(prev => prev.map(n => n.id === notif.id
+        ? { ...n, read_by: (n.read_by ?? []).filter(id => id !== currentUserId) }
+        : n
+      ))
+    } else {
+      await supabase.rpc('mark_notification_read', { p_notification_id: notif.id, p_user_id: currentUserId })
+      setNotifications(prev => prev.map(n => n.id === notif.id
+        ? { ...n, read_by: [...(n.read_by ?? []), currentUserId] }
+        : n
+      ))
+    }
+  }
+
   const groups = groupByDate(notifications)
+  const hasUnread = notifications.some(n =>
+    !(n.read_by ?? []).includes(currentUserId ?? '') &&
+    n.triggered_by_member_id !== myMemberId
+  )
 
   return (
     <div>
       <div style={{ background: 'var(--header-bg)', padding: '24px 20px 28px', position: 'sticky', top: 0, zIndex: 10 }}>
-        <div style={{ maxWidth: 520, margin: '0 auto' }}>
+        <div style={{ maxWidth: 520, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <p style={{ fontSize: 22, fontWeight: 500, color: 'var(--header-text)' }}>Notifikacije</p>
+          {hasUnread && (
+            <button
+              onClick={markAllRead}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 13, color: 'rgba(255,255,255,0.7)', padding: '4px 0',
+              }}
+            >
+              Označi sve kao pročitano
+            </button>
+          )}
         </div>
       </div>
 
@@ -122,14 +192,14 @@ export default function NotifikacijePage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {group.items.map(n => {
                     const icon = typeIcon(n.type)
-                    const unread = memberId ? !n.read_by.includes(memberId) : false
+                    const isRead = (n.read_by ?? []).includes(currentUserId ?? '')
+                    const unread = !isRead && n.triggered_by_member_id !== myMemberId
                     return (
-                      <div key={n.id} className="card" style={{
-                        padding: '14px 16px',
-                        display: 'flex', alignItems: 'flex-start', gap: 12,
-                        background: unread ? 'var(--card)' : 'var(--card)',
-                        position: 'relative',
-                      }}>
+                      <div
+                        key={n.id}
+                        className="card"
+                        style={{ padding: '14px 16px', display: 'flex', alignItems: 'flex-start', gap: 12, position: 'relative' }}
+                      >
                         {unread && (
                           <div style={{
                             position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
@@ -150,7 +220,18 @@ export default function NotifikacijePage() {
                           <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', marginBottom: 2 }}>{n.title}</p>
                           <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.4 }}>{n.body}</p>
                         </div>
-                        <p style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0, marginLeft: 4, paddingTop: 2 }}>{timeAgo(n.created_at)}</p>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0, marginLeft: 4 }}>
+                          <p style={{ fontSize: 11, color: 'var(--text-3)', paddingTop: 2 }}>{timeAgo(n.created_at)}</p>
+                          <button
+                            onClick={() => toggleRead(n)}
+                            style={{
+                              background: 'none', border: 'none', cursor: 'pointer',
+                              fontSize: 11, color: 'var(--text-3)', padding: 0, lineHeight: 1,
+                            }}
+                          >
+                            {isRead ? 'Nepročitano' : 'Pročitano'}
+                          </button>
+                        </div>
                       </div>
                     )
                   })}

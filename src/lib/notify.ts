@@ -1,5 +1,5 @@
 export function notifyHousehold(params: {
-  householdId: string
+  householdId?: string | null
   triggeredByMemberId?: string | null
   type: string
   title: string

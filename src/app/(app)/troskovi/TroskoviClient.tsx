@@ -4,10 +4,11 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useHouseholdId } from '@/hooks/useHouseholdId'
 import { notifyHousehold } from '@/lib/notify'
 import CalendarPopup from '@/components/ui/CalendarPopup'
 import AmountInput, { parseAmount, formatAmount } from '@/components/ui/AmountInput'
+import SwipeActions, { SwipeAction } from '@/components/ui/SwipeActions'
+import EditAmountSheet from '@/components/ui/EditAmountSheet'
 
 type RecurringItem = {
   id: string; name: string; amount: number | null; currency: string
@@ -28,7 +29,7 @@ type Check = {
 
 type Payment = { id: string; amount: number; currency: string; date: string; note: string | null; member?: { name: string } | null }
 type Debt = {
-  id: string; name: string; direction: string
+  id: string; name: string; direction: string; status: string
   total_amount: number; paid: number; remaining: number; currency: string
   start_date: string | null; note: string | null
   payments: Payment[]
@@ -109,7 +110,6 @@ function PayRecurringModal({ item, month, eurToRsd, onClose }: { item: Recurring
   const [loading, setLoading] = useState(false)
   const [errMsg, setErrMsg] = useState('')
   const [currentMember, setCurrentMember] = useState<{ id: string; name: string } | null>(null)
-  const householdId = useHouseholdId()
   const supabase = createClient()
   const router = useRouter()
 
@@ -123,25 +123,22 @@ function PayRecurringModal({ item, month, eurToRsd, onClose }: { item: Recurring
 
   async function handlePay() {
     const a = parseAmount(amount)
-    if (!a || a <= 0 || !householdId) return
+    if (!a || a <= 0) return
     setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
     const { error } = await supabase.from('transactions').insert({
-      household_id: householdId,
       bucket_id: item.bucket_id, category_id: item.category_id,
       recurring_item_id: item.id, user_id: user!.id,
       type: 'rashod', amount: a, currency, date, month,
-      name: item.name, member_id: currentMember?.id ?? null,
     })
     setLoading(false)
     if (error) { setErrMsg(error.message); return }
     const fmtN = (n: number) => new Intl.NumberFormat('sr-Latn-RS').format(Math.round(n))
     notifyHousehold({
-      householdId,
       triggeredByMemberId: currentMember?.id,
       type: 'racun_placen',
-      title: currentMember?.name ?? 'Neko',
-      body: `Platio/la: ${item.name} · ${fmtN(a)} ${currency}`,
+      title: 'Račun plaćen',
+      body: `${currentMember?.name ?? 'Neko'} · ${item.name} · ${fmtN(a)} ${currency}`,
     })
     onClose(); router.refresh()
   }
@@ -251,7 +248,6 @@ function PayKreditModal({ credit, month, onClose }: { credit: Credit; month: str
   const [loading, setLoading] = useState(false)
   const [errMsg, setErrMsg] = useState('')
   const [currentMember, setCurrentMember] = useState<{ id: string; name: string } | null>(null)
-  const householdId = useHouseholdId()
   const supabase = createClient()
   const router = useRouter()
 
@@ -264,21 +260,18 @@ function PayKreditModal({ credit, month, onClose }: { credit: Credit; month: str
   }, [])
 
   async function handlePay() {
-    if (!householdId) return
     setLoading(true)
     const { error } = await supabase.from('credit_payments').insert({
-      household_id: householdId,
-      credit_id: credit.id, amount: credit.monthly_payment, date, member_id: currentMember?.id ?? null,
+      credit_id: credit.id, amount: credit.monthly_payment, date,
     })
     setLoading(false)
     if (error) { setErrMsg(error.message); return }
     const fmtN = (n: number) => new Intl.NumberFormat('sr-Latn-RS').format(Math.round(n))
     notifyHousehold({
-      householdId,
       triggeredByMemberId: currentMember?.id,
       type: 'kredit_placen',
-      title: currentMember?.name ?? 'Neko',
-      body: `Rata: ${credit.name} · ${fmtN(credit.monthly_payment)} ${credit.currency}`,
+      title: 'Rata plaćena',
+      body: `${currentMember?.name ?? 'Neko'} · ${credit.name} · ${fmtN(credit.monthly_payment)} ${credit.currency}`,
     })
     onClose(); router.refresh()
   }
@@ -338,7 +331,6 @@ function DebtModal({ debt, month, onClose }: { debt: Debt; month: string; onClos
   const [errMsg, setErrMsg] = useState('')
   const [confirmSettle, setConfirmSettle] = useState(false)
   const [currentMember, setCurrentMember] = useState<{ id: string; name: string } | null>(null)
-  const householdId = useHouseholdId()
   const supabase = createClient()
   const router = useRouter()
 
@@ -354,29 +346,45 @@ function DebtModal({ debt, month, onClose }: { debt: Debt; month: string; onClos
 
   async function addPayment() {
     const a = parseAmount(amount)
-    if (!a || a <= 0 || !householdId) return
+    if (!a || a <= 0) return
     setLoading(true)
     const { error } = await supabase.from('debt_payments').insert({
-      household_id: householdId,
       debt_id: debt.id, amount: a, currency: debt.currency, date,
-      note: note.trim() || null, member_id: currentMember?.id ?? null,
+      note: note.trim() || null,
     })
-    setLoading(false)
-    if (error) { setErrMsg(error.message); return }
+    if (error) { setErrMsg(error.message); setLoading(false); return }
+
     const fmtN = (n: number) => new Intl.NumberFormat('sr-Latn-RS').format(Math.round(n))
+    const memberName = currentMember?.name ?? 'Neko'
     notifyHousehold({
-      householdId,
       triggeredByMemberId: currentMember?.id,
       type: 'dug_placen',
-      title: currentMember?.name ?? 'Neko',
-      body: `Uplata duga: ${debt.name} · ${fmtN(a)} ${debt.currency}`,
+      title: 'Uplata pozajmice',
+      body: `${memberName} · ${debt.name} · ${fmtN(a)} ${debt.currency}`,
     })
+    const newPaid = debt.paid + a
+    if (newPaid >= debt.total_amount) {
+      await supabase.from('dugovi').update({ status: 'izmireno' }).eq('id', debt.id)
+      notifyHousehold({
+        triggeredByMemberId: currentMember?.id,
+        type: 'dug_izmiren',
+        title: 'Pozajmica izmirena',
+        body: `${debt.name}`,
+      })
+    }
+    setLoading(false)
     setAmount(''); setNote(''); setErrMsg('')
     router.refresh()
   }
 
   async function markSettled() {
-    await supabase.from('debts').update({ status: 'izmireno' }).eq('id', debt.id)
+    await supabase.from('dugovi').update({ status: 'izmireno' }).eq('id', debt.id)
+    notifyHousehold({
+      triggeredByMemberId: currentMember?.id,
+      type: 'dug_izmiren',
+      title: 'Pozajmica izmirena',
+      body: `${debt.name}`,
+    })
     onClose(); router.refresh()
   }
 
@@ -433,7 +441,7 @@ function DebtModal({ debt, month, onClose }: { debt: Debt; month: string; onClos
           <div style={{ overflowY: 'auto', padding: '16px 20px calc(32px + var(--safe-bottom))' }}>
             <p style={{ fontSize: 17, fontWeight: 500, color: 'var(--text-1)', marginBottom: 4 }}>{debt.name}</p>
             <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 14 }}>
-              {debt.direction === 'dugujemo' ? 'Mi dugujemo' : 'Duguju nam'}
+              {debt.direction === 'dugujemo' ? 'Primljena pozajmica' : 'Data pozajmica'}
               {debt.start_date && ` · Do: ${fmtDate(debt.start_date)}`}
             </p>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -540,21 +548,67 @@ type ExtraExpense = {
   note: string | null; categoryName: string; bucketName: string
 }
 
-export default function TroskoviClient({ recurring, credits, checks, debts, extraExpenses, month, eurToRsd }: {
+export default function TroskoviClient({ recurring, credits, checks, debts, extraExpenses, month, eurToRsd, monthStart, monthEnd }: {
   recurring: RecurringItem[]; credits: Credit[]; checks: Check[]; debts: Debt[]
-  extraExpenses: ExtraExpense[]; month: string; eurToRsd: number
+  extraExpenses: ExtraExpense[]; month: string; eurToRsd: number; monthStart: string; monthEnd: string
 }) {
   const [payingRecurring, setPayingRecurring] = useState<RecurringItem | null>(null)
   const [payingCredit, setPayingCredit] = useState<Credit | null>(null)
   const [openDebtId, setOpenDebtId] = useState<string | null>(null)
   const [confirmPayCheck, setConfirmPayCheck] = useState<Check | null>(null)
-  const [confirmUndo, setConfirmUndo] = useState<{ name: string; undoType: 'recurring' | 'credit' | 'check'; undoId: string } | null>(null)
+  const [confirmUndo, setConfirmUndo] = useState<{ name: string; undoType: 'recurring' | 'credit' | 'check' | 'debt'; undoId: string } | null>(null)
+  const [confirmDeleteCek, setConfirmDeleteCek] = useState<string | null>(null)
+  const [confirmDeleteDebt, setConfirmDeleteDebt] = useState<string | null>(null)
+  const [confirmDeleteRecurring, setConfirmDeleteRecurring] = useState<RecurringItem | null>(null)
+  const [confirmDeleteCredit, setConfirmDeleteCredit] = useState<Credit | null>(null)
+  const [confirmDeleteExtra, setConfirmDeleteExtra] = useState<string | null>(null)
+  const [editExtra, setEditExtra] = useState<ExtraExpense | null>(null)
+  const [editAmount, setEditAmount] = useState<RecurringItem | null>(null)
   const openDebt = openDebtId ? debts.find(d => d.id === openDebtId) ?? null : null
   const supabase = createClient()
   const router = useRouter()
 
   async function markCekPaid(id: string) {
-    await supabase.from('checks').update({ status: 'isplacen', cleared_at: new Date().toISOString() }).eq('id', id)
+    await supabase.from('cekovi').update({ status: 'isplacen', cleared_at: new Date().toISOString() }).eq('id', id)
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: member } = await supabase.from('members').select('id, name').eq('user_id', user!.id).single()
+    const cek = checks.find(c => c.id === id)
+    notifyHousehold({
+      triggeredByMemberId: member?.id,
+      type: 'cek',
+      title: 'Ček isplaćen',
+      body: `${member?.name ?? 'Neko'} · ${cek ? `${cek.quantity} ${cek.quantity === 1 ? 'ček' : cek.quantity < 5 ? 'čeka' : 'čekova'} · ${fmt(cek.quantity * CEK_VALUE)} RSD` : ''}`,
+    })
+    router.refresh()
+  }
+
+  async function deleteCek(id: string) {
+    await supabase.from('cekovi').delete().eq('id', id)
+    setConfirmDeleteCek(null)
+    router.refresh()
+  }
+
+  async function deleteDebt(id: string) {
+    await supabase.from('dugovi').delete().eq('id', id)
+    setConfirmDeleteDebt(null)
+    router.refresh()
+  }
+
+  async function deleteRecurring(id: string) {
+    await supabase.from('recurring_items').delete().eq('id', id)
+    setConfirmDeleteRecurring(null)
+    router.refresh()
+  }
+
+  async function deleteCredit(id: string) {
+    await supabase.from('credits').delete().eq('id', id)
+    setConfirmDeleteCredit(null)
+    router.refresh()
+  }
+
+  async function deleteExtra(id: string) {
+    await supabase.from('transactions').delete().eq('id', id)
+    setConfirmDeleteExtra(null)
     router.refresh()
   }
 
@@ -566,7 +620,9 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
     } else if (undoType === 'credit') {
       await supabase.from('credit_payments').delete().eq('id', undoId)
     } else if (undoType === 'check') {
-      await supabase.from('checks').update({ status: 'na_cekanju', cleared_at: null }).eq('id', undoId)
+      await supabase.from('cekovi').update({ status: 'na_cekanju', cleared_at: null }).eq('id', undoId)
+    } else if (undoType === 'debt') {
+      await supabase.from('dugovi').update({ status: 'aktivno' }).eq('id', undoId)
     }
     setConfirmUndo(null)
     router.refresh()
@@ -579,17 +635,38 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
   const pendingChecks = checks.filter(c => c.status === 'na_cekanju')
   const paidChecks = checks.filter(c => c.status === 'isplacen')
 
+  const activeDebts = debts.filter(d => d.status === 'aktivno')
+  const settledDebtsThisMonth = debts.filter(d =>
+    d.status === 'izmireno' &&
+    d.payments.some(p => p.date >= monthStart && p.date <= monthEnd)
+  )
+
   const allPaid = [
     ...paidRecurring.map(r => ({ id: r.id, name: r.name, sub: r.bucketName, amount: r.paidAmount ?? r.amount, currency: r.currency, undoType: 'recurring' as const, undoId: r.transactionId ?? '' })),
     ...paidCredits.map(c => ({ id: c.id, name: c.name, sub: c.bucketName, amount: c.monthly_payment, currency: c.currency, undoType: 'credit' as const, undoId: c.creditPaymentId ?? '' })),
     ...paidChecks.map(c => ({ id: c.id, name: `${c.quantity} ${c.quantity === 1 ? 'ček' : c.quantity < 5 ? 'čeka' : 'čekova'}`, sub: fmtDate(c.date), amount: c.quantity * CEK_VALUE, currency: 'RSD', undoType: 'check' as const, undoId: c.id })),
+    ...settledDebtsThisMonth.map(d => ({ id: d.id, name: d.name, sub: d.direction === 'dugujemo' ? 'Primljena pozajmica' : 'Data pozajmica', amount: d.total_amount, currency: d.currency, undoType: 'debt' as const, undoId: d.id })),
   ]
 
-  const isEmpty = recurring.length === 0 && credits.length === 0 && pendingChecks.length === 0 && debts.length === 0 && extraExpenses.length === 0 && allPaid.length === 0
+  const isEmpty = recurring.length === 0 && credits.length === 0 && pendingChecks.length === 0 && activeDebts.length === 0 && extraExpenses.length === 0 && allPaid.length === 0
+
+  const todayStr = today()
+  const todayDay = parseInt(todayStr.slice(8))
+  const currentMonth = todayStr.slice(0, 7)
+
+  function isMonthOverdue(dueDay: number): boolean {
+    return month < currentMonth || (month === currentMonth && todayDay > dueDay)
+  }
 
   const pendingBadge = (
     <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 20, background: 'var(--red-light)', color: 'var(--red)' }}>
       Na čekanju
+    </span>
+  )
+
+  const overdueBadge = (
+    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'var(--red)', color: '#fff' }}>
+      Kašnjenje!
     </span>
   )
 
@@ -605,26 +682,36 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
         <>
           <p className="section-label">Mesečni računi</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-            {unpaidRecurring.map(r => (
-              <div key={r.id} className="card" onClick={() => setPayingRecurring(r)}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', cursor: 'pointer' }}
-              >
-                <div>
-                  <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', marginBottom: 3 }}>{r.name}</p>
-                  <p style={{ fontSize: 12, color: 'var(--text-3)' }}>{r.bucketName} · do {r.due_day}. u mesecu</p>
-                </div>
-                <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
-                  {r.amount ? (
-                    <p className="num" style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-1)', marginBottom: 4 }}>
-                      {fmt(r.amount)} <span style={{ fontSize: 11, opacity: 0.6 }}>{r.currency}</span>
-                    </p>
-                  ) : (
-                    <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 4 }}>Varijabilno</p>
-                  )}
-                  {pendingBadge}
-                </div>
-              </div>
-            ))}
+            {unpaidRecurring.map(r => {
+              const overdue = isMonthOverdue(r.due_day)
+              const actions: SwipeAction[] = [
+                { label: 'Plati', color: 'primary', onClick: () => setPayingRecurring(r) },
+                ...(r.type === 'varijabilni' ? [{ label: 'Izmeni', color: 'neutral' as const, onClick: () => setEditAmount(r) }] : []),
+                { label: 'Obriši', color: 'danger' as const, onClick: () => setConfirmDeleteRecurring(r) },
+              ]
+              return (
+                <SwipeActions key={r.id} actions={actions}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px' }}>
+                    <div>
+                      <p style={{ fontSize: 14, fontWeight: 500, color: overdue ? 'var(--red)' : 'var(--text-1)', marginBottom: 3 }}>{r.name}</p>
+                      <p style={{ fontSize: 11, color: overdue ? 'var(--red)' : 'var(--text-3)' }}>
+                        {r.bucketName} · do {r.due_day}. u mesecu
+                      </p>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
+                      {r.amount ? (
+                        <p className="num" style={{ fontSize: 15, fontWeight: 500, color: overdue ? 'var(--red)' : 'var(--text-1)', marginBottom: 4 }}>
+                          {fmt(r.amount)} <span style={{ fontSize: 11, opacity: 0.6 }}>{r.currency}</span>
+                        </p>
+                      ) : (
+                        <p style={{ fontSize: 12, color: overdue ? 'var(--red)' : 'var(--text-3)', marginBottom: 4 }}>Varijabilno</p>
+                      )}
+                      {overdue ? overdueBadge : pendingBadge}
+                    </div>
+                  </div>
+                </SwipeActions>
+              )
+            })}
           </div>
         </>
       )}
@@ -633,31 +720,39 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
         <>
           <p className="section-label">Krediti</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-            {unpaidCredits.map(c => (
-              <div key={c.id} className="card" onClick={() => setPayingCredit(c)}
-                style={{ padding: '14px 16px', cursor: 'pointer' }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div>
-                    <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', marginBottom: 3 }}>{c.name}</p>
-                    <p style={{ fontSize: 12, color: 'var(--text-3)' }}>{c.bucketName} · do {c.due_day}. u mesecu</p>
+            {unpaidCredits.map(c => {
+              const overdue = isMonthOverdue(c.due_day)
+              return (
+                <SwipeActions key={c.id} actions={[
+                  { label: 'Plati', color: 'primary', onClick: () => setPayingCredit(c) },
+                  { label: 'Obriši', color: 'danger', onClick: () => setConfirmDeleteCredit(c) },
+                ]}>
+                  <div style={{ padding: '14px 16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <div>
+                        <p style={{ fontSize: 14, fontWeight: 500, color: overdue ? 'var(--red)' : 'var(--text-1)', marginBottom: 3 }}>{c.name}</p>
+                        <p style={{ fontSize: 11, color: overdue ? 'var(--red)' : 'var(--text-3)' }}>
+                          {c.bucketName} · do {c.due_day}. u mesecu
+                        </p>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
+                        <p className="num" style={{ fontSize: 15, fontWeight: 500, color: overdue ? 'var(--red)' : 'var(--text-1)', marginBottom: 4 }}>
+                          {fmt(c.monthly_payment)} <span style={{ fontSize: 11, opacity: 0.6 }}>RSD</span>
+                        </p>
+                        {overdue ? overdueBadge : pendingBadge}
+                      </div>
+                    </div>
+                    <div style={{ height: 4, borderRadius: 4, background: 'var(--border-2)' }}>
+                      <div style={{
+                        height: '100%', borderRadius: 4, background: overdue ? 'var(--red)' : 'var(--accent)',
+                        width: `${Math.min(100, ((c.original_amount - c.remaining_amount) / c.original_amount) * 100)}%`,
+                        transition: 'width 0.3s',
+                      }} />
+                    </div>
                   </div>
-                  <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
-                    <p className="num" style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-1)', marginBottom: 4 }}>
-                      {fmt(c.monthly_payment)} <span style={{ fontSize: 11, opacity: 0.6 }}>RSD</span>
-                    </p>
-                    {pendingBadge}
-                  </div>
-                </div>
-                <div style={{ height: 4, borderRadius: 4, background: 'var(--border-2)' }}>
-                  <div style={{
-                    height: '100%', borderRadius: 4, background: 'var(--accent)',
-                    width: `${Math.min(100, ((c.original_amount - c.remaining_amount) / c.original_amount) * 100)}%`,
-                    transition: 'width 0.3s',
-                  }} />
-                </div>
-              </div>
-            ))}
+                </SwipeActions>
+              )
+            })}
           </div>
         </>
       )}
@@ -666,55 +761,80 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
         <>
           <p className="section-label">Čekovi</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-            {pendingChecks.map(c => (
-              <div key={c.id} className="card" onClick={() => setConfirmPayCheck(c)}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', cursor: 'pointer' }}
-              >
-                <div>
-                  <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', marginBottom: 3 }}>
-                    {c.quantity} {c.quantity === 1 ? 'ček' : c.quantity < 5 ? 'čeka' : 'čekova'}
-                  </p>
-                  {c.date && <p style={{ fontSize: 12, color: 'var(--text-3)' }}>{fmtDate(c.date)}</p>}
-                  {c.note && <p style={{ fontSize: 12, color: 'var(--text-3)' }}>{c.note}</p>}
-                </div>
-                <p className="num" style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-1)', flexShrink: 0, marginLeft: 12 }}>
-                  {fmt(c.quantity * CEK_VALUE)} <span style={{ fontSize: 11, opacity: 0.6 }}>RSD</span>
-                </p>
-              </div>
-            ))}
+            {pendingChecks.map(c => {
+              const overdue = c.date < todayStr
+              return (
+                <SwipeActions
+                  key={c.id}
+                  actions={[
+                    { label: 'Isplati', color: 'primary', onClick: () => setConfirmPayCheck(c) },
+                    { label: 'Obriši', color: 'danger', onClick: () => setConfirmDeleteCek(c.id) },
+                  ]}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px' }}>
+                    <div>
+                      <p style={{ fontSize: 14, fontWeight: 500, color: overdue ? 'var(--red)' : 'var(--text-1)', marginBottom: 3 }}>
+                        {c.quantity} {c.quantity === 1 ? 'ček' : c.quantity < 5 ? 'čeka' : 'čekova'}
+                      </p>
+                      {c.date && <p style={{ fontSize: 11, color: overdue ? 'var(--red)' : 'var(--text-3)' }}>{fmtDate(c.date)}</p>}
+                      {c.note && <p style={{ fontSize: 11, color: 'var(--text-3)' }}>{c.note}</p>}
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
+                      <p className="num" style={{ fontSize: 15, fontWeight: 500, color: overdue ? 'var(--red)' : 'var(--text-1)', marginBottom: 4 }}>
+                        {fmt(c.quantity * CEK_VALUE)} <span style={{ fontSize: 11, opacity: 0.6 }}>RSD</span>
+                      </p>
+                      {overdue ? overdueBadge : pendingBadge}
+                    </div>
+                  </div>
+                </SwipeActions>
+              )
+            })}
           </div>
         </>
       )}
 
-      {debts.length > 0 && (
+      {activeDebts.length > 0 && (
         <>
-          <p className="section-label">Dugovi</p>
+          <p className="section-label">Pozajmice</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-            {debts.map(d => (
-              <div key={d.id} className="card" onClick={() => setOpenDebtId(d.id)}
-                style={{ padding: '14px 16px', cursor: 'pointer' }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div>
-                    <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', marginBottom: 3 }}>{d.name}</p>
-                    <p style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                      {d.direction === 'dugujemo' ? 'Mi dugujemo' : 'Duguju nam'}
-                    </p>
+            {activeDebts.map(d => {
+              const overdue = !!(d.start_date && d.start_date < todayStr)
+              return (
+                <SwipeActions
+                  key={d.id}
+                  actions={[
+                    { label: 'Otvori', color: 'primary', onClick: () => setOpenDebtId(d.id) },
+                    { label: 'Obriši', color: 'danger', onClick: () => setConfirmDeleteDebt(d.id) },
+                  ]}
+                >
+                  <div style={{ padding: '14px 16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <div>
+                        <p style={{ fontSize: 14, fontWeight: 500, color: overdue ? 'var(--red)' : 'var(--text-1)', marginBottom: 3 }}>{d.name}</p>
+                        <p style={{ fontSize: 11, color: overdue ? 'var(--red)' : 'var(--text-3)' }}>
+                          {d.direction === 'dugujemo' ? 'Primljena pozajmica' : 'Data pozajmica'}
+                          {d.start_date && ` · Rok: ${fmtDate(d.start_date)}`}
+                        </p>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
+                        <p className="num" style={{ fontSize: 15, fontWeight: 500, color: overdue ? 'var(--red)' : (d.direction === 'dugujemo' ? 'var(--red)' : 'var(--accent)'), marginBottom: 4 }}>
+                          {fmt(d.remaining)} <span style={{ fontSize: 11, opacity: 0.6 }}>{d.currency}</span>
+                        </p>
+                        {overdue ? overdueBadge : pendingBadge}
+                      </div>
+                    </div>
+                    <div style={{ height: 4, borderRadius: 4, background: 'var(--border-2)' }}>
+                      <div style={{
+                        height: '100%', borderRadius: 4,
+                        background: overdue ? 'var(--red)' : (d.direction === 'dugujemo' ? '#f87171' : 'var(--accent)'),
+                        width: `${Math.min(100, (d.paid / d.total_amount) * 100)}%`,
+                        transition: 'width 0.3s',
+                      }} />
+                    </div>
                   </div>
-                  <p className="num" style={{ fontSize: 15, fontWeight: 500, color: d.direction === 'dugujemo' ? 'var(--red)' : 'var(--accent)', flexShrink: 0, marginLeft: 12 }}>
-                    {fmt(d.remaining)} <span style={{ fontSize: 11, opacity: 0.6 }}>{d.currency}</span>
-                  </p>
-                </div>
-                <div style={{ height: 4, borderRadius: 4, background: 'var(--border-2)' }}>
-                  <div style={{
-                    height: '100%', borderRadius: 4,
-                    background: d.direction === 'dugujemo' ? '#f87171' : 'var(--accent)',
-                    width: `${Math.min(100, (d.paid / d.total_amount) * 100)}%`,
-                    transition: 'width 0.3s',
-                  }} />
-                </div>
-              </div>
-            ))}
+                </SwipeActions>
+              )
+            })}
           </div>
         </>
       )}
@@ -723,37 +843,39 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
         <>
           <p className="section-label">Plaćeno</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-            {allPaid.map(item => (
-              <div key={item.id} className="card"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px' }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-3)', marginBottom: 3 }}>{item.name}</p>
-                  <p style={{ fontSize: 12, color: 'var(--text-3)' }}>{item.sub}</p>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, marginLeft: 12 }}>
-                  <div style={{ textAlign: 'right' }}>
-                    {item.amount != null && (
-                      <p className="num" style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-3)', marginBottom: 4 }}>
-                        {fmt(item.amount)} <span style={{ fontSize: 11, opacity: 0.6 }}>{item.currency}</span>
-                      </p>
-                    )}
-                    {paidBadge}
+            {allPaid.map(item => {
+              const isCheck = item.undoType === 'check'
+              const isDebt = item.undoType === 'debt'
+              const paidActions: SwipeAction[] = []
+              if (item.undoId) {
+                paidActions.push({
+                  label: isCheck ? 'Na čekanju' : isDebt ? 'Aktivno' : 'Neplaćeno',
+                  color: 'neutral',
+                  onClick: () => setConfirmUndo({ name: item.name, undoType: item.undoType, undoId: item.undoId }),
+                })
+              }
+              if (isCheck && item.undoId) {
+                paidActions.push({ label: 'Obriši', color: 'danger', onClick: () => setConfirmDeleteCek(item.undoId) })
+              }
+              return (
+                <SwipeActions key={item.id} actions={paidActions}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-3)', marginBottom: 3 }}>{item.name}</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-3)' }}>{item.sub}</p>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
+                      {item.amount != null && (
+                        <p className="num" style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-3)', marginBottom: 4 }}>
+                          {fmt(item.amount)} <span style={{ fontSize: 11, opacity: 0.6 }}>{item.currency}</span>
+                        </p>
+                      )}
+                      {paidBadge}
+                    </div>
                   </div>
-                  {item.undoId && (
-                    <button
-                      onClick={() => setConfirmUndo({ name: item.name, undoType: item.undoType, undoId: item.undoId })}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center', opacity: 0.4 }}
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 7v6h6" />
-                        <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+                </SwipeActions>
+              )
+            })}
           </div>
         </>
       )}
@@ -763,24 +885,30 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
           <p className="section-label">Ostali troškovi</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
             {extraExpenses.map(e => (
-              <div key={e.id} className="card"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px' }}
+              <SwipeActions
+                key={e.id}
+                actions={[
+                  { label: 'Izmeni', color: 'neutral', onClick: () => setEditExtra(e) },
+                  { label: 'Obriši', color: 'danger', onClick: () => setConfirmDeleteExtra(e.id) },
+                ]}
               >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-3)', marginBottom: 3 }}>
-                    {e.name || 'Bez naziva'}
-                  </p>
-                  <p style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                    {e.categoryName}{e.bucketName ? ` · ${e.bucketName}` : ''} · {fmtDate(e.date)}
-                  </p>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-3)', marginBottom: 3 }}>
+                      {e.name || 'Bez naziva'}
+                    </p>
+                    <p style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                      {e.categoryName}{e.bucketName ? ` · ${e.bucketName}` : ''} · {fmtDate(e.date)}
+                    </p>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
+                    <p className="num" style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-3)', marginBottom: 4 }}>
+                      {fmt(e.amount)} <span style={{ fontSize: 11, opacity: 0.6 }}>{e.currency}</span>
+                    </p>
+                    {paidBadge}
+                  </div>
                 </div>
-                <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
-                  <p className="num" style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-3)', marginBottom: 4 }}>
-                    {fmt(e.amount)} <span style={{ fontSize: 11, opacity: 0.6 }}>{e.currency}</span>
-                  </p>
-                  {paidBadge}
-                </div>
-              </div>
+              </SwipeActions>
             ))}
           </div>
         </>
@@ -838,7 +966,7 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
           >
             <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-1)', marginBottom: 8 }}>Poništi plaćanje?</p>
             <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 20 }}>
-              &ldquo;{confirmUndo.name}&rdquo; će biti vraćeno na neplaćeno.
+              &ldquo;{confirmUndo.name}&rdquo; će biti vraćeno na {confirmUndo.undoType === 'debt' ? 'aktivno' : 'neplaćeno'}.
             </p>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setConfirmUndo(null)} style={{
@@ -862,6 +990,118 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
       )}
       {openDebt && (
         <DebtModal debt={openDebt} month={month} onClose={() => setOpenDebtId(null)} />
+      )}
+
+      {editAmount && (
+        <EditAmountSheet
+          title={editAmount.name}
+          current={editAmount.amount ?? undefined}
+          currency={editAmount.currency}
+          onSave={async a => {
+            await supabase.from('recurring_items').update({ amount: a }).eq('id', editAmount.id)
+            setEditAmount(null)
+            router.refresh()
+          }}
+          onClose={() => setEditAmount(null)}
+        />
+      )}
+
+      {confirmDeleteCek && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)', padding: '0 24px' }}
+          onClick={() => setConfirmDeleteCek(null)}
+        >
+          <div style={{ width: '100%', maxWidth: 340, background: 'var(--card)', borderRadius: 20, padding: '24px 20px' }} onClick={e => e.stopPropagation()}>
+            <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-1)', marginBottom: 8 }}>Obriši ček?</p>
+            <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 20 }}>Ček će biti trajno obrisan.</p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirmDeleteCek(null)} style={{ flex: 1, padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500, border: '1.5px solid var(--border)', background: 'var(--card)', color: 'var(--text-2)', cursor: 'pointer' }}>Otkaži</button>
+              <button onClick={() => deleteCek(confirmDeleteCek)} style={{ flex: 1, padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500, border: 'none', background: 'var(--red)', color: '#fff', cursor: 'pointer' }}>Obriši</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDeleteDebt && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)', padding: '0 24px' }}
+          onClick={() => setConfirmDeleteDebt(null)}
+        >
+          <div style={{ width: '100%', maxWidth: 340, background: 'var(--card)', borderRadius: 20, padding: '24px 20px' }} onClick={e => e.stopPropagation()}>
+            <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-1)', marginBottom: 8 }}>Obriši pozajmicu?</p>
+            <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 20 }}>Pozajmica i sve uplate biće trajno obrisane.</p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirmDeleteDebt(null)} style={{ flex: 1, padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500, border: '1.5px solid var(--border)', background: 'var(--card)', color: 'var(--text-2)', cursor: 'pointer' }}>Otkaži</button>
+              <button onClick={() => deleteDebt(confirmDeleteDebt)} style={{ flex: 1, padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500, border: 'none', background: 'var(--red)', color: '#fff', cursor: 'pointer' }}>Obriši</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDeleteRecurring && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)', padding: '0 24px' }}
+          onClick={() => setConfirmDeleteRecurring(null)}
+        >
+          <div style={{ width: '100%', maxWidth: 340, background: 'var(--card)', borderRadius: 20, padding: '24px 20px' }} onClick={e => e.stopPropagation()}>
+            <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-1)', marginBottom: 8 }}>Obriši račun?</p>
+            <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 20 }}>
+              &ldquo;{confirmDeleteRecurring.name}&rdquo; će biti trajno obrisan i neće se više pojavljivati.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirmDeleteRecurring(null)} style={{ flex: 1, padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500, border: '1.5px solid var(--border)', background: 'var(--card)', color: 'var(--text-2)', cursor: 'pointer' }}>Otkaži</button>
+              <button onClick={() => deleteRecurring(confirmDeleteRecurring.id)} style={{ flex: 1, padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500, border: 'none', background: 'var(--red)', color: '#fff', cursor: 'pointer' }}>Obriši</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editExtra && (
+        <EditAmountSheet
+          title={editExtra.name || 'Trošak'}
+          current={editExtra.amount}
+          currency={editExtra.currency}
+          onSave={async a => {
+            await supabase.from('transactions').update({ amount: a }).eq('id', editExtra.id)
+            setEditExtra(null)
+            router.refresh()
+          }}
+          onClose={() => setEditExtra(null)}
+        />
+      )}
+
+      {confirmDeleteExtra && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)', padding: '0 24px' }}
+          onClick={() => setConfirmDeleteExtra(null)}
+        >
+          <div style={{ width: '100%', maxWidth: 340, background: 'var(--card)', borderRadius: 20, padding: '24px 20px' }} onClick={e => e.stopPropagation()}>
+            <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-1)', marginBottom: 8 }}>Obriši trošak?</p>
+            <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 20 }}>Transakcija će biti trajno obrisana.</p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirmDeleteExtra(null)} style={{ flex: 1, padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500, border: '1.5px solid var(--border)', background: 'var(--card)', color: 'var(--text-2)', cursor: 'pointer' }}>Otkaži</button>
+              <button onClick={() => deleteExtra(confirmDeleteExtra)} style={{ flex: 1, padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500, border: 'none', background: 'var(--red)', color: '#fff', cursor: 'pointer' }}>Obriši</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDeleteCredit && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)', padding: '0 24px' }}
+          onClick={() => setConfirmDeleteCredit(null)}
+        >
+          <div style={{ width: '100%', maxWidth: 340, background: 'var(--card)', borderRadius: 20, padding: '24px 20px' }} onClick={e => e.stopPropagation()}>
+            <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-1)', marginBottom: 8 }}>Obriši kredit?</p>
+            <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 20 }}>
+              &ldquo;{confirmDeleteCredit.name}&rdquo; i sve rate biće trajno obrisane.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirmDeleteCredit(null)} style={{ flex: 1, padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500, border: '1.5px solid var(--border)', background: 'var(--card)', color: 'var(--text-2)', cursor: 'pointer' }}>Otkaži</button>
+              <button onClick={() => deleteCredit(confirmDeleteCredit.id)} style={{ flex: 1, padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500, border: 'none', background: 'var(--red)', color: '#fff', cursor: 'pointer' }}>Obriši</button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

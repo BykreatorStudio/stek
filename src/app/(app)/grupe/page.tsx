@@ -4,7 +4,7 @@ import GrupeClient from './GrupeClient'
 
 export default async function GrupePage() {
   const supabase = await createClient()
-  const { data: buckets } = await supabase.from('buckets').select('*').order('sort_order')
+  const { data: buckets } = await supabase.from('buckets').select('*').order('name')
 
   return (
     <div>

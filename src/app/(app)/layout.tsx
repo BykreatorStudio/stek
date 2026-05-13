@@ -1,4 +1,5 @@
 import BottomNav from '@/components/layout/BottomNav'
+import RealtimeRefresher from '@/components/layout/RealtimeRefresher'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
@@ -12,6 +13,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <RealtimeRefresher householdId={hm.household_id} />
       <main style={{ flex: 1, overflowY: 'auto', paddingBottom: 'calc(var(--nav-height) + var(--safe-bottom) + 16px)' }}>
         {children}
       </main>

@@ -1,16 +1,26 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import ClanoviClient from './ClanoviClient'
+import { redirect } from 'next/navigation'
+import PodesavanjaClient from './PodesavanjaClient'
 
-export default async function ClanoviPage() {
+export default async function PodesavanjaPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  const [{ data: members }, { data: myHm }] = await Promise.all([
-    supabase.from('members').select('*').order('created_at'),
-    supabase.from('household_members').select('role').eq('user_id', user.id).single(),
-  ])
+  if (!user) redirect('/login')
 
-  const currentUserRole = myHm?.role ?? 'member'
+  const { data: hm } = await supabase
+    .from('household_members')
+    .select('notif_enabled, notif_bills, notif_pozajmice, notif_cekovi, notif_ostalo')
+    .eq('user_id', user.id)
+    .single()
+
+  const initialPrefs = {
+    notif_enabled: hm?.notif_enabled ?? true,
+    notif_bills: hm?.notif_bills ?? true,
+    notif_pozajmice: hm?.notif_pozajmice ?? true,
+    notif_cekovi: hm?.notif_cekovi ?? true,
+    notif_ostalo: hm?.notif_ostalo ?? true,
+  }
 
   return (
     <div>
@@ -21,10 +31,10 @@ export default async function ClanoviPage() {
               <polyline points="15 18 9 12 15 6" />
             </svg>
           </Link>
-          <p style={{ fontSize: 18, fontWeight: 500, color: 'var(--header-text)' }}>Članovi</p>
+          <p style={{ fontSize: 18, fontWeight: 500, color: 'var(--header-text)' }}>Podešavanja</p>
         </div>
       </div>
-      <ClanoviClient members={members ?? []} currentUserId={user?.id ?? ''} currentUserRole={currentUserRole} />
+      <PodesavanjaClient userEmail={user.email ?? ''} initialPrefs={initialPrefs} />
     </div>
   )
 }

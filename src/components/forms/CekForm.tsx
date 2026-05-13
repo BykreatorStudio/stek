@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import CalendarPopup from '@/components/ui/CalendarPopup'
-import { useHouseholdId } from '@/hooks/useHouseholdId'
 import { notifyHousehold } from '@/lib/notify'
 
 const CEK_VALUE = 5000
@@ -30,7 +29,6 @@ export default function CekForm({ onClose }: { onClose: () => void }) {
   const [currentMember, setCurrentMember] = useState<{ id: string; name: string } | null>(null)
   const supabase = createClient()
   const router = useRouter()
-  const householdId = useHouseholdId()
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -44,7 +42,7 @@ export default function CekForm({ onClose }: { onClose: () => void }) {
     const q = parseInt(qty)
     if (!q || q < 1 || !date) return
     setLoading(true)
-    const { error } = await supabase.from('checks').insert({
+    const { error } = await supabase.from('cekovi').insert({
       quantity: q, date,
       month: date.slice(0, 7),
       note: note.trim() || null,
@@ -52,17 +50,14 @@ export default function CekForm({ onClose }: { onClose: () => void }) {
     })
     setLoading(false)
     if (error) return
-    if (householdId) {
-      const total = q * CEK_VALUE
-      const fmt = (n: number) => new Intl.NumberFormat('sr-Latn-RS').format(n)
-      notifyHousehold({
-        householdId,
-        triggeredByMemberId: currentMember?.id,
-        type: 'cek',
-        title: currentMember?.name ?? 'Neko',
-        body: `Dodat ${q === 1 ? 'ček' : `${q} čeka`} · ${fmt(total)} RSD`,
-      })
-    }
+    const total = q * CEK_VALUE
+    const fmtN = (n: number) => new Intl.NumberFormat('sr-Latn-RS').format(n)
+    notifyHousehold({
+      triggeredByMemberId: currentMember?.id,
+      type: 'cek',
+      title: 'Dodati čekovi',
+      body: `${currentMember?.name ?? 'Neko'} · ${q === 1 ? '1 ček' : `${q} čeka`} · ${fmtN(total)} RSD`,
+    })
     onClose()
     router.refresh()
   }
