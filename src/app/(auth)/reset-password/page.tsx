@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { AuthLogoSection } from '@/components/ui/AuthLogo'
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState('')
@@ -22,18 +23,23 @@ export default function ResetPasswordPage() {
     const { error } = await supabase.auth.updateUser({ password })
     if (error) { setError(error.message); setLoading(false); return }
     setDone(true)
-    setTimeout(() => router.push('/dashboard'), 2000)
+    setTimeout(() => { window.location.href = '/dashboard' }, 2000)
   }
 
   return (
     <div style={{
-      minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      minHeight: '100vh', display: 'flex', flexDirection: 'column',
       background: 'radial-gradient(ellipse at 50% 30%, rgba(200,255,49,0.28) 0%, #ffffff 65%)',
-      padding: '24px',
     }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 24px 32px' }}>
+        <AuthLogoSection />
+      </div>
+
       <div style={{
-        width: '100%', maxWidth: 400,
-        background: '#ffffff', borderRadius: 28, padding: '28px 24px',
+        background: '#ffffff',
+        borderRadius: '28px 28px 0 0',
+        padding: '28px 24px',
+        paddingBottom: 'calc(28px + var(--safe-bottom))',
         boxShadow: '0 -1px 0 rgba(0,0,0,0.06)',
       }}>
         {done ? (

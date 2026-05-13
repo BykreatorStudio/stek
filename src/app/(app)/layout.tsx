@@ -1,5 +1,6 @@
 import BottomNav from '@/components/layout/BottomNav'
 import RealtimeRefresher from '@/components/layout/RealtimeRefresher'
+import IOSInstallGuide from '@/components/ui/IOSInstallGuide'
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
@@ -9,7 +10,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!user) redirect('/login')
 
   const { data: hm } = await supabase.from('household_members').select('household_id').eq('user_id', user.id).single()
-  if (!hm) redirect('/setup')
+  if (!hm) redirect('/api/auth/signout')
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -18,6 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {children}
       </main>
       <BottomNav />
+      <IOSInstallGuide />
     </div>
   )
 }

@@ -118,6 +118,14 @@ export default function MesecniRacuniClient({
                       borderBottom: i < bItems.length - 1 ? '1px solid var(--border)' : 'none',
                     }}
                   >
+                    <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--bg-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="15" height="15" viewBox="0 0 39.56 39.77" fill="none" stroke="var(--text-3)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M7.02,38.27h27.36c2.03,0,3.68-1.65,3.68-3.68V10.69L28.86,1.5H10.69c-2.03,0-3.68,1.65-3.68,3.68v7.35" />
+                        <path d="M27.03,1.5v7.35c0,2.03,1.65,3.68,3.68,3.68h7.35" />
+                        <path d="M1.5,25.4h11.03" />
+                        <path d="M7.02,19.89v11.03" />
+                      </svg>
+                    </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', marginBottom: 3 }}>{item.name}</p>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -237,7 +245,6 @@ export default function MesecniRacuniClient({
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="Naziv (npr. Struja, Kirija...)"
-              autoFocus
               style={{
                 width: '100%', padding: '13px 16px', fontSize: 14,
                 color: 'var(--text-1)', border: '1.5px solid var(--border)',

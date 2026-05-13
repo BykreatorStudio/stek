@@ -255,7 +255,6 @@ function AddKreditModal({ buckets, onClose }: { buckets: Bucket[]; onClose: () =
             value={name}
             onChange={e => setName(e.target.value)}
             placeholder="Naziv kredita"
-            autoFocus
             style={{ ...inputStyle, marginBottom: 10 }}
           />
 
@@ -337,14 +336,20 @@ function KreditCard({ credit, onOpen }: { credit: Credit; onOpen: () => void }) 
         style={{ marginBottom: 8 }}
       >
         <div style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-            <div>
-              <p style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-1)', marginBottom: 3 }}>{credit.name}</p>
-              <p style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                {fmt(credit.monthly_payment)} RSD/mes · {credit.due_day}. u mesecu
-              </p>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--bg-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="15" height="11" viewBox="0 0 38.76 28.03" fill="none" stroke="var(--text-3)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M37.26,8.65v14.3c0,1.97-1.6,3.58-3.58,3.58H5.08c-1.98,0-3.58-1.6-3.58-3.58V5.08c0-1.97,1.6-3.58,3.58-3.58h28.61c1.98,0,3.58,1.6,3.58,3.58,0,0,0,3.58,0,3.58ZM37.26,8.65H1.5" />
+              </svg>
             </div>
-            <div style={{ textAlign: 'right' }}>
+            <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <p style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-1)', marginBottom: 3 }}>{credit.name}</p>
+                <p style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                  {fmt(credit.monthly_payment)} RSD/mes · {credit.due_day}. u mesecu
+                </p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
               <p className="num" style={{ fontSize: 16, fontWeight: 500, color: '#f87171', marginBottom: 2 }}>
                 {fmt(credit.remaining_amount)}
                 <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 3, opacity: 0.6 }}>RSD</span>
@@ -352,6 +357,7 @@ function KreditCard({ credit, onOpen }: { credit: Credit; onOpen: () => void }) 
               <p style={{ fontSize: 11, fontWeight: 500, color: credit.paidThisMonth ? 'var(--accent)' : 'var(--red)' }}>
                 {credit.paidThisMonth ? 'Plaćeno' : 'Na čekanju'}
               </p>
+            </div>
             </div>
           </div>
           <div style={{ height: 4, borderRadius: 4, background: 'var(--border-2)' }}>

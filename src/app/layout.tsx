@@ -2,13 +2,13 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Finansije',
+  title: 'Štediša',
   description: 'Porodično praćenje finansija',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Finansije',
+    title: 'Štediša',
   },
 }
 

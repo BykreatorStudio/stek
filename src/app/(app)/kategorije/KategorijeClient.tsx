@@ -13,7 +13,9 @@ export default function KategorijeClient({ buckets, categories }: { buckets: Buc
   const [catCurrency, setCatCurrency] = useState<'RSD' | 'EUR'>('RSD')
   const [catBucketId, setCatBucketId] = useState(buckets[0]?.id ?? '')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [confirmDeleteAllId, setConfirmDeleteAllId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const supabase = createClient()
   const router = useRouter()
@@ -46,9 +48,23 @@ export default function KategorijeClient({ buckets, categories }: { buckets: Buc
     setLoading(false); closeForm(); router.refresh()
   }
 
-  async function handleDelete(id: string) {
+  async function handleDeleteKeep(id: string) {
+    setDeleting(true)
     await supabase.from('categories').update({ is_active: false }).eq('id', id)
-    setConfirmDeleteId(null); router.refresh()
+    setDeleting(false)
+    setConfirmDeleteId(null)
+    router.refresh()
+  }
+
+  async function handleDeleteAll(id: string) {
+    setDeleting(true)
+    await supabase.from('transactions').delete().eq('category_id', id)
+    await supabase.from('recurring_items').delete().eq('category_id', id)
+    await supabase.from('categories').delete().eq('id', id)
+    setDeleting(false)
+    setConfirmDeleteAllId(null)
+    setConfirmDeleteId(null)
+    router.refresh()
   }
 
   function bucketName(id: string) {
@@ -70,11 +86,18 @@ export default function KategorijeClient({ buckets, categories }: { buckets: Buc
               <div className="card" style={{ overflow: 'hidden' }}>
                 {group.items.map((cat, i) => (
                   <div key={cat.id} style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    display: 'flex', alignItems: 'center', gap: 12,
                     padding: '14px 20px',
                     borderBottom: i < group.items.length - 1 ? '1px solid var(--border)' : 'none',
                   }}>
-                    <div>
+                    <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--bg-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="15" height="15" viewBox="0 0 39.03 37.38" fill="none" stroke="var(--text-3)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M35.08,25.03c.7.42,1.29.79,1.77,1.1.9.59.9,1.81,0,2.41-1.38.91-3.66,2.27-6.96,3.84-4.21,2.01-7.59,2.97-9.25,3.36-.74.18-1.51.18-2.25,0-1.66-.4-5.04-1.36-9.25-3.36-3.3-1.57-5.58-2.93-6.96-3.84-.9-.59-.9-1.81,0-2.41.58-.38,1.17-.75,1.77-1.1" />
+                        <path d="M35.08,16.28c.7.42,1.29.79,1.77,1.1.9.59.9,1.81,0,2.41-1.38.91-3.66,2.27-6.96,3.84-4.21,2.01-7.59,2.97-9.25,3.36-.74.18-1.51.18-2.25,0-1.66-.4-5.04-1.36-9.25-3.36-3.3-1.57-5.58-2.93-6.96-3.84-.9-.59-.9-1.81,0-2.41.58-.38,1.17-.75,1.77-1.1" />
+                        <path d="M18.39,1.63c.74-.18,1.51-.18,2.25,0,1.66.4,5.04,1.36,9.25,3.36,3.3,1.57,5.58,2.93,6.96,3.84.9.59.9,1.81,0,2.41-1.38.91-3.66,2.27-6.96,3.84-4.21,2.01-7.59,2.97-9.25,3.36-.74.18-1.51.18-2.25,0-1.66-.4-5.04-1.36-9.25-3.36-3.3-1.57-5.58-2.93-6.96-3.84-.9-.59-.9-1.81,0-2.41,1.38-.91,3.66-2.27,6.96-3.84,4.21-2.01,7.59-2.97,9.25-3.36Z" />
+                      </svg>
+                    </div>
+                    <div style={{ flex: 1 }}>
                       <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', marginBottom: 2 }}>{cat.name}</p>
                       <p style={{ fontSize: 11, color: 'var(--text-3)' }}>{bucketName(cat.bucket_id)} · {cat.currency_default}</p>
                     </div>
@@ -108,16 +131,42 @@ export default function KategorijeClient({ buckets, categories }: { buckets: Buc
         </svg>
       </button>
 
-      {/* Confirm delete */}
-      {confirmDeleteId && (
+      {/* Delete — choose mode */}
+      {confirmDeleteId && !confirmDeleteAllId && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)', padding: '0 24px' }}
           onClick={() => setConfirmDeleteId(null)}>
+          <div style={{ width: '100%', maxWidth: 360, background: 'var(--card)', borderRadius: 20, padding: '24px 20px' }} onClick={e => e.stopPropagation()}>
+            <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-1)', marginBottom: 6 }}>Obriši kategoriju?</p>
+            <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 20 }}>Odaberi šta se dešava sa troškovima u ovoj kategoriji.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button onClick={() => setConfirmDeleteId(null)} style={{ padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500, border: '1.5px solid var(--border)', background: 'var(--card)', color: 'var(--text-2)', cursor: 'pointer' }}>
+                Otkaži
+              </button>
+              <button onClick={() => !deleting && handleDeleteKeep(confirmDeleteId)} disabled={deleting} style={{ padding: '13px 16px', borderRadius: 12, fontSize: 14, fontWeight: 500, border: '1.5px solid var(--border-2)', background: 'var(--card)', color: 'var(--text-1)', cursor: 'pointer', textAlign: 'left' }}>
+                <p style={{ marginBottom: 3 }}>Obriši samo kategoriju</p>
+                <p style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 400 }}>Svi troškovi ostaju vidljivi bez kategorije.</p>
+              </button>
+              <button onClick={() => setConfirmDeleteAllId(confirmDeleteId)} style={{ padding: '13px 16px', borderRadius: 12, fontSize: 14, fontWeight: 500, border: 'none', background: 'var(--red)', color: '#fff', cursor: 'pointer', textAlign: 'left' }}>
+                <p style={{ marginBottom: 3 }}>Obriši kategoriju i troškove</p>
+                <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: 400 }}>Briše se i svi troškovi i mesečni računi u ovoj kategoriji.</p>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete all — second confirm */}
+      {confirmDeleteAllId && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 310, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)', padding: '0 24px' }}
+          onClick={() => setConfirmDeleteAllId(null)}>
           <div style={{ width: '100%', maxWidth: 340, background: 'var(--card)', borderRadius: 20, padding: '24px 20px' }} onClick={e => e.stopPropagation()}>
-            <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-1)', marginBottom: 8 }}>Obriši kategoriju?</p>
-            <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 20 }}>Ova akcija se ne može poništiti.</p>
+            <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--red)', marginBottom: 8 }}>Sigurno obrisati sve?</p>
+            <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 20 }}>Ovo trajno briše sve troškove i mesečne račune u ovoj kategoriji. Ne može se poništiti.</p>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setConfirmDeleteId(null)} style={{ flex: 1, padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500, border: '1.5px solid var(--border)', background: 'var(--card)', color: 'var(--text-2)', cursor: 'pointer' }}>Otkaži</button>
-              <button onClick={() => handleDelete(confirmDeleteId)} style={{ flex: 1, padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500, border: 'none', background: 'var(--red)', color: '#fff', cursor: 'pointer' }}>Obriši</button>
+              <button onClick={() => setConfirmDeleteAllId(null)} style={{ flex: 1, padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500, border: '1.5px solid var(--border)', background: 'var(--card)', color: 'var(--text-2)', cursor: 'pointer' }}>Otkaži</button>
+              <button onClick={() => !deleting && handleDeleteAll(confirmDeleteAllId)} disabled={deleting} style={{ flex: 1, padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500, border: 'none', background: 'var(--red)', color: '#fff', cursor: 'pointer' }}>
+                {deleting ? 'Brisanje...' : 'Obriši sve'}
+              </button>
             </div>
           </div>
         </div>
@@ -135,7 +184,7 @@ export default function KategorijeClient({ buckets, categories }: { buckets: Buc
             <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-1)', marginBottom: 20 }}>
               {editingCat ? 'Izmeni kategoriju' : 'Nova kategorija'}
             </p>
-            <input value={catName} onChange={e => setCatName(e.target.value)} placeholder="Naziv kategorije" autoFocus
+            <input value={catName} onChange={e => setCatName(e.target.value)} placeholder="Naziv kategorije"
               style={{ width: '100%', padding: '13px 16px', fontSize: 14, color: 'var(--text-1)', border: '1.5px solid var(--border)', borderRadius: 12, background: 'var(--card)', outline: 'none', fontFamily: 'inherit', marginBottom: 10 }} />
             <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
               {([

@@ -364,7 +364,6 @@ function AddDebtModal({ buckets, onClose }: { buckets: { id: string; name: strin
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder={direction === 'dugujemo' ? 'Ime davaoca pozajmice' : 'Ime primaoca pozajmice'}
-              autoFocus
               style={{
                 width: '100%', padding: '13px 16px', fontSize: 14,
                 color: 'var(--text-1)', border: '1.5px solid var(--border)',
@@ -458,18 +457,27 @@ function DebtCard({ debt, onOpen }: { debt: Debt; onOpen: () => void }) {
         style={{ marginBottom: 8, opacity: isSettled ? 0.6 : 1 }}
       >
         <div style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-            <div>
-              <p style={{ fontSize: 15, fontWeight: 500, color: isSettled ? 'var(--text-3)' : overdue ? 'var(--red)' : 'var(--text-1)', marginBottom: 3 }}>
-                {debt.name}
-              </p>
-              {debt.start_date && (
-                <p style={{ fontSize: 11, color: overdue ? 'var(--red)' : 'var(--text-3)', fontWeight: overdue ? 500 : 400 }}>
-                  {overdue ? `Rok prošao: ${fmtDate(debt.start_date)}` : `Do: ${fmtDate(debt.start_date)}`}
-                </p>
-              )}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--bg-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="15" height="15" viewBox="0 0 39 39" fill="none" stroke="var(--text-3)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2.5,11.5C5.28,5.14,12.15,1.5,19.54,1.5c9.36,0,17.05,7.1,17.96,16.2" />
+                <path d="M10.52,12.3H2.58c-.6,0-1.08-.48-1.08-1.08h0V3.3" />
+                <path d="M36.5,27.5c-2.78,6.36-9.64,10-17.04,10-9.36,0-17.05-7.1-17.96-16.2" />
+                <path d="M28.48,26.7h7.94c.6,0,1.08.48,1.08,1.08,0,0,0,0,0,0v7.92" />
+              </svg>
             </div>
-            <div style={{ textAlign: 'right' }}>
+            <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <p style={{ fontSize: 15, fontWeight: 500, color: isSettled ? 'var(--text-3)' : overdue ? 'var(--red)' : 'var(--text-1)', marginBottom: 3 }}>
+                  {debt.name}
+                </p>
+                {debt.start_date && (
+                  <p style={{ fontSize: 11, color: overdue ? 'var(--red)' : 'var(--text-3)', fontWeight: overdue ? 500 : 400 }}>
+                    {overdue ? `Rok prošao: ${fmtDate(debt.start_date)}` : `Do: ${fmtDate(debt.start_date)}`}
+                  </p>
+                )}
+              </div>
+              <div style={{ textAlign: 'right' }}>
               {isSettled ? (
                 <span style={{ fontSize: 11, fontWeight: 500, padding: '3px 10px', borderRadius: 20, background: 'var(--accent-light)', color: 'var(--accent-dark)' }}>
                   Izmireno
@@ -493,6 +501,7 @@ function DebtCard({ debt, onOpen }: { debt: Debt; onOpen: () => void }) {
                   <p style={{ fontSize: 11, color: 'var(--text-3)' }}>od {fmt(debt.total_amount)}</p>
                 </>
               )}
+            </div>
             </div>
           </div>
           <div style={{ height: 4, borderRadius: 4, background: 'var(--border-2)' }}>

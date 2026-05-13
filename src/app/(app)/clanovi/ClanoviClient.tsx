@@ -89,7 +89,6 @@ function InviteModal({ onClose }: { onClose: () => void }) {
               value={email}
               onChange={e => setEmail(e.target.value)}
               placeholder="Email adresa"
-              autoFocus
               onKeyDown={e => e.key === 'Enter' && handleGenerate()}
               style={{ width: '100%', padding: '13px 16px', fontSize: 14, color: 'var(--text-1)', border: '1.5px solid var(--border)', borderRadius: 12, background: 'var(--card)', outline: 'none', fontFamily: 'inherit', marginBottom: 12 }}
             />
@@ -165,7 +164,6 @@ function LeaveModal({ onClose }: { onClose: () => void }) {
   const [userEmail, setUserEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const supabase = createClient()
-  const router = useRouter()
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -175,11 +173,9 @@ function LeaveModal({ onClose }: { onClose: () => void }) {
 
   async function handleLeave() {
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    await supabase.from('household_members').delete().eq('user_id', user.id)
-    await supabase.auth.signOut()
-    router.push('/login')
+    const res = await fetch('/api/delete-account', { method: 'POST' })
+    if (!res.ok) { setLoading(false); return }
+    window.location.href = '/login'
   }
 
   const emailMatch = email.trim().toLowerCase() === userEmail.toLowerCase()
@@ -288,11 +284,13 @@ export default function ClanoviClient({ members, currentUserId, currentUserRole 
   const isOwner = currentUserRole === 'owner'
 
   async function handleRemoveMember(member: Member) {
-    const { error } = await supabase.from('members').delete().eq('id', member.id)
-    if (error) { console.error('remove member error:', error); return }
-    if (member.user_id) {
-      await supabase.from('household_members').delete().eq('user_id', member.user_id)
-    }
+    if (!member.user_id) return
+    const res = await fetch('/api/admin/remove-member', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memberId: member.id, userId: member.user_id }),
+    })
+    if (!res.ok) { console.error('remove member error'); return }
     setRemoveMember(null)
     router.refresh()
   }
@@ -394,7 +392,7 @@ export default function ClanoviClient({ members, currentUserId, currentUserRole 
               <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 10 }}>Tapni za dodavanje fotografije</p>
             </div>
             <input ref={fileRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="Ime člana" autoFocus onKeyDown={e => e.key === 'Enter' && handleSave()} style={{ width: '100%', padding: '13px 16px', fontSize: 14, color: 'var(--text-1)', border: '1.5px solid var(--border)', borderRadius: 12, background: 'var(--card)', outline: 'none', fontFamily: 'inherit', marginBottom: 24 }} />
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="Ime člana" onKeyDown={e => e.key === 'Enter' && handleSave()} style={{ width: '100%', padding: '13px 16px', fontSize: 14, color: 'var(--text-1)', border: '1.5px solid var(--border)', borderRadius: 12, background: 'var(--card)', outline: 'none', fontFamily: 'inherit', marginBottom: 24 }} />
             <button onClick={handleSave} disabled={loading || !name.trim()} className="btn-primary">
               {loading ? 'Čuvanje...' : 'Sačuvaj izmene'}
             </button>

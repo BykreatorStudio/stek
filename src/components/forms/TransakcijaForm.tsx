@@ -170,7 +170,6 @@ export default function TransakcijaForm({ onClose }: { onClose: () => void }) {
               value={amount}
               onChange={setAmount}
               placeholder="0"
-              autoFocus
               className="num"
               style={{
                 fontSize: 52, fontWeight: 500, color: 'var(--text-1)',

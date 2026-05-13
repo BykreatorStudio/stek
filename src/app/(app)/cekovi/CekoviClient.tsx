@@ -93,14 +93,12 @@ export default function CekoviClient({ checks }: { checks: Cek[] }) {
                     <div style={{
                       width: 40, height: 40, borderRadius: 12, flexShrink: 0,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: overdue ? 'rgba(217,48,37,0.1)' : '#f0f0f0',
+                      background: overdue ? 'rgba(217,48,37,0.1)' : 'var(--bg-subtle)',
                     }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                        stroke={overdue ? '#d93025' : '#888'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="4" width="18" height="18" rx="3" />
-                        <line x1="16" y1="2" x2="16" y2="6" />
-                        <line x1="8" y1="2" x2="8" y2="6" />
-                        <line x1="3" y1="10" x2="21" y2="10" />
+                      <svg width="16" height="16" viewBox="0 0 39.66 38.67" fill="none"
+                        stroke={overdue ? '#d93025' : 'var(--text-3)'} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17.56,23.31l-6.05.86.86-6.05L27.93,2.57c.34-.34.74-.61,1.19-.79.44-.18.92-.28,1.4-.28s.96.09,1.4.28c.44.18.85.45,1.19.79.34.34.61.74.79,1.19.18.44.28.92.28,1.4s-.09.96-.28,1.4c-.18.44-.45.85-.79,1.19l-15.55,15.55Z" />
+                        <path d="M8.83,15.17H3.94c-.65,0-1.27.26-1.73.72-.46.46-.72,1.08-.72,1.73v17.11c0,.65.26,1.27.72,1.73.46.46,1.08.72,1.73.72h31.77c.65,0,1.27-.26,1.73-.72s.72-1.08.72-1.73v-17.11c0-.65-.26-1.27-.72-1.73-.46-.46-1.08-.72-1.73-.72h-2.44" />
                       </svg>
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -151,8 +149,9 @@ export default function CekoviClient({ checks }: { checks: Cek[] }) {
               >
                 <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
                   <div style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--accent-light)' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12" />
+                    <svg width="16" height="16" viewBox="0 0 39.66 38.67" fill="none" stroke="var(--accent)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17.56,23.31l-6.05.86.86-6.05L27.93,2.57c.34-.34.74-.61,1.19-.79.44-.18.92-.28,1.4-.28s.96.09,1.4.28c.44.18.85.45,1.19.79.34.34.61.74.79,1.19.18.44.28.92.28,1.4s-.09.96-.28,1.4c-.18.44-.45.85-.79,1.19l-15.55,15.55Z" />
+                      <path d="M8.83,15.17H3.94c-.65,0-1.27.26-1.73.72-.46.46-.72,1.08-.72,1.73v17.11c0,.65.26,1.27.72,1.73.46.46,1.08.72,1.73.72h31.77c.65,0,1.27-.26,1.73-.72s.72-1.08.72-1.73v-17.11c0-.65-.26-1.27-.72-1.73-.46-.46-1.08-.72-1.73-.72h-2.44" />
                     </svg>
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>

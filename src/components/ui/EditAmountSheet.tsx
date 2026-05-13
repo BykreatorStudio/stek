@@ -50,7 +50,6 @@ export default function EditAmountSheet({
               value={amount}
               onChange={setAmount}
               placeholder="0"
-              autoFocus
               className="num"
               style={{
                 flex: 1, padding: '14px 16px', fontSize: 22, fontWeight: 500,

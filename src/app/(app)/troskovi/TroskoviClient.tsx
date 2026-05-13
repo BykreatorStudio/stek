@@ -179,7 +179,6 @@ function PayRecurringModal({ item, month, eurToRsd, onClose }: { item: Recurring
               value={amount}
               onChange={setAmount}
               placeholder="0"
-              autoFocus
               readOnly={item.type === 'fiksni'}
               className="num"
               style={{
@@ -484,7 +483,6 @@ function DebtModal({ debt, month, onClose }: { debt: Debt; month: string; onClos
               value={amount}
               onChange={setAmount}
               placeholder="Iznos"
-              autoFocus
               className="num"
               style={{
                 width: '100%', padding: '13px 16px', fontSize: 14,

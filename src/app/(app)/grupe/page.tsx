@@ -4,7 +4,10 @@ import GrupeClient from './GrupeClient'
 
 export default async function GrupePage() {
   const supabase = await createClient()
-  const { data: buckets } = await supabase.from('buckets').select('*').order('name')
+  const [{ data: buckets }, { data: hm }] = await Promise.all([
+    supabase.from('buckets').select('*').order('name'),
+    supabase.from('household_members').select('household_id').single(),
+  ])
 
   return (
     <div>
@@ -19,7 +22,7 @@ export default async function GrupePage() {
         </div>
       </div>
 
-      <GrupeClient buckets={buckets ?? []} />
+      <GrupeClient buckets={buckets ?? []} householdId={hm?.household_id ?? ''} />
     </div>
   )
 }
