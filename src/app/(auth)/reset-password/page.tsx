@@ -20,7 +20,17 @@ function ResetPasswordInner() {
   useEffect(() => {
     const code = searchParams.get('code')
 
-    if (code) {
+    const tokenHash = searchParams.get('token_hash')
+    const type = searchParams.get('type')
+
+    if (tokenHash && type === 'recovery') {
+      supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' }).then(({ error }) => {
+        if (error) {
+          setError('Link za reset lozinke je istekao ili je već iskorišćen. Zatražite novi.')
+        }
+        setExchanging(false)
+      })
+    } else if (code) {
       supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
         if (error) {
           setError('Link za reset lozinke je istekao ili je već iskorišćen. Zatražite novi.')
