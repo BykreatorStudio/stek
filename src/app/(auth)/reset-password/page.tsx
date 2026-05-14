@@ -28,13 +28,7 @@ function ResetPasswordInner() {
         setExchanging(false)
       })
     } else {
-      // No code — check if already in PASSWORD_RECOVERY state (hash-based flow)
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (!session) {
-          setError('Link nije validan. Zatražite novi link za reset lozinke.')
-        }
-        setExchanging(false)
-      })
+      router.replace('/forgot-password')
     }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
