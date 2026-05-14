@@ -10,6 +10,14 @@ function admin() {
   )
 }
 
+async function deleteAuthUser(supabaseAdmin: ReturnType<typeof admin>, userId: string) {
+  await supabaseAdmin.from('transactions').delete().eq('user_id', userId)
+  await supabaseAdmin.from('push_subscriptions').delete().eq('user_id', userId)
+  await supabaseAdmin.from('members').update({ user_id: null }).eq('user_id', userId)
+  await supabaseAdmin.from('household_members').delete().eq('user_id', userId)
+  return supabaseAdmin.auth.admin.deleteUser(userId)
+}
+
 export async function POST() {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -32,18 +40,13 @@ export async function POST() {
 
     for (const m of others ?? []) {
       if (!m.user_id) continue
-      await supabaseAdmin.from('household_members').delete().eq('user_id', m.user_id)
-      await supabaseAdmin.from('members').update({ user_id: null }).eq('user_id', m.user_id)
-      const { error: delErr } = await supabaseAdmin.auth.admin.deleteUser(m.user_id)
-      if (delErr) return NextResponse.json({ error: `Greška pri brisanju člana: ${delErr.message}` }, { status: 500 })
+      const { error } = await deleteAuthUser(supabaseAdmin, m.user_id)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     }
   }
 
-  await supabaseAdmin.from('members').update({ user_id: null }).eq('user_id', user.id)
-  await supabaseAdmin.from('household_members').delete().eq('user_id', user.id)
   await supabase.auth.signOut()
-
-  const { error } = await supabaseAdmin.auth.admin.deleteUser(user.id)
+  const { error } = await deleteAuthUser(supabaseAdmin, user.id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   return NextResponse.json({ ok: true })
