@@ -4,9 +4,10 @@ import GrupeClient from './GrupeClient'
 
 export default async function GrupePage() {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
   const [{ data: buckets }, { data: hm }] = await Promise.all([
     supabase.from('buckets').select('*').order('name'),
-    supabase.from('household_members').select('household_id').single(),
+    supabase.from('household_members').select('household_id').eq('user_id', user!.id).single(),
   ])
 
   return (
