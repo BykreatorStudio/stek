@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import TransakcijeSection from './TransakcijeSection'
+import MemberStats from './MemberStats'
 import NotifBell from '@/components/layout/NotifBell'
 
 const CEK_VALUE = 5000
@@ -140,7 +141,7 @@ export default async function DashboardPage() {
     const mTxs = transactions.filter((t: any) => t.member_id === m.id)
     const prihodi = mTxs.filter((t: any) => t.type === 'prihod').reduce((s: number, t: any) => s + t.amount, 0)
     const rashodi = mTxs.filter((t: any) => t.type === 'rashod').reduce((s: number, t: any) => s + t.amount, 0)
-    return { id: m.id, name: m.name, avatar_url: m.avatar_url ?? null, prihodi, rashodi, count: mTxs.length }
+    return { id: m.id, name: m.name, avatar_url: m.avatar_url ?? null, prihodi, rashodi, count: mTxs.length, txs: mTxs }
   })
 
   // --- Upcoming & overdue (next 15 days + any overdue) ---
@@ -378,37 +379,7 @@ export default async function DashboardPage() {
 
         {/* --- Po članovima --- */}
         {members.length > 0 && hasData && (
-          <>
-            <p className="section-label">Po članovima</p>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-              {memberStats.map((m: any) => (
-                <div key={m.id} className="card" style={{ flex: 1, padding: '14px 16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    {m.avatar_url ? (
-                      <img src={m.avatar_url} alt={m.name} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                    ) : (
-                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--text-1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: '#fff' }}>{m.name.charAt(0)}</span>
-                      </div>
-                    )}
-                    <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>{m.name}</p>
-                  </div>
-                  {m.count > 0 ? (
-                    <>
-                      {m.rashodi > 0 && (
-                        <p className="num" style={{ fontSize: 13, color: 'var(--red)', marginBottom: 2 }}>-{fmt(m.rashodi)} RSD</p>
-                      )}
-                      {m.prihodi > 0 && (
-                        <p className="num" style={{ fontSize: 13, color: 'var(--accent)' }}>+{fmt(m.prihodi)} RSD</p>
-                      )}
-                    </>
-                  ) : (
-                    <p style={{ fontSize: 12, color: 'var(--text-3)' }}>—</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </>
+          <MemberStats memberStats={memberStats} month={cap(monthLabel)} />
         )}
 
         {/* --- Poslednje transakcije --- */}

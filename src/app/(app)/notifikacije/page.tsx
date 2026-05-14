@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import SwipeActions from '@/components/ui/SwipeActions'
 
 type Notif = {
   id: string
@@ -210,46 +211,40 @@ export default function NotifikacijePage() {
                     const isRead = (n.read_by ?? []).includes(currentUserId ?? '')
                     const unread = !isRead && n.triggered_by_member_id !== myMemberId
                     return (
-                      <div
+                      <SwipeActions
                         key={n.id}
-                        className="card"
-                        style={{ padding: '14px 16px', display: 'flex', alignItems: 'flex-start', gap: 12, position: 'relative' }}
+                        actions={[{
+                          label: isRead ? 'Nepročitano' : 'Pročitano',
+                          color: 'neutral',
+                          onClick: () => toggleRead(n),
+                        }]}
                       >
-                        {unread && (
+                        <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'flex-start', gap: 12, position: 'relative' }}>
+                          {unread && (
+                            <div style={{
+                              position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
+                              width: 4, height: 4, borderRadius: '50%', background: '#f87171',
+                            }} />
+                          )}
                           <div style={{
-                            position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
-                            width: 4, height: 4, borderRadius: '50%', background: '#f87171',
-                          }} />
-                        )}
-                        <div style={{
-                          width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          background: icon.bg,
-                        }}>
-                          <svg width="16" height="16" viewBox={icon.viewBox}
-                            fill={icon.isFill ? icon.color : 'none'}
-                            stroke={icon.isFill ? 'none' : icon.color}
-                            strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                            {icon.paths.map((d, i) => <path key={i} d={d} />)}
-                          </svg>
+                            width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            background: icon.bg,
+                          }}>
+                            <svg width="16" height="16" viewBox={icon.viewBox}
+                              fill={icon.isFill ? icon.color : 'none'}
+                              stroke={icon.isFill ? 'none' : icon.color}
+                              strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                              {icon.paths.map((d, i) => <path key={i} d={d} />)}
+                            </svg>
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', marginBottom: 2 }}>{n.title}</p>
+                            <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.4 }}>{n.body}</p>
+                          </div>
+                          <p style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0, marginLeft: 4, paddingTop: 2 }}>{timeAgo(n.created_at)}</p>
                         </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', marginBottom: 2 }}>{n.title}</p>
-                          <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.4 }}>{n.body}</p>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0, marginLeft: 4 }}>
-                          <p style={{ fontSize: 11, color: 'var(--text-3)', paddingTop: 2 }}>{timeAgo(n.created_at)}</p>
-                          <button
-                            onClick={() => toggleRead(n)}
-                            style={{
-                              background: 'none', border: 'none', cursor: 'pointer',
-                              fontSize: 11, color: 'var(--text-3)', padding: 0, lineHeight: 1,
-                            }}
-                          >
-                            {isRead ? 'Nepročitano' : 'Pročitano'}
-                          </button>
-                        </div>
-                      </div>
+                      </SwipeActions>
                     )
                   })}
                 </div>

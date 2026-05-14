@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import TransakcijaForm from '@/components/forms/TransakcijaForm'
 import CekForm from '@/components/forms/CekForm'
@@ -52,10 +52,11 @@ const navRight: NavItemDef[] = [
 ]
 
 type Mode = null | 'picker' | 'transakcija' | 'cek'
+type PickerKey = 'transakcija' | 'cek' | 'nav_sef' | 'nav_dugovi'
 
-const PICKER_OPTIONS = [
+const PICKER_OPTIONS: { key: PickerKey; label: string; desc: string; icon: React.ReactNode }[] = [
   {
-    key: 'transakcija' as const,
+    key: 'transakcija',
     label: 'Transakcija',
     desc: 'Prihod ili rashod',
     icon: (
@@ -66,7 +67,7 @@ const PICKER_OPTIONS = [
     ),
   },
   {
-    key: 'cek' as const,
+    key: 'cek',
     label: 'Ček',
     desc: 'Ček na naplatu · 5.000 RSD',
     icon: (
@@ -74,6 +75,30 @@ const PICKER_OPTIONS = [
         stroke="var(--text-2)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M17.56,23.31l-6.05.86.86-6.05L27.93,2.57c.34-.34.74-.61,1.19-.79.44-.18.92-.28,1.4-.28s.96.09,1.4.28c.44.18.85.45,1.19.79.34.34.61.74.79,1.19.18.44.28.92.28,1.4s-.09.96-.28,1.4c-.18.44-.45.85-.79,1.19l-15.55,15.55Z" />
         <path d="M8.83,15.17H3.94c-.65,0-1.27.26-1.73.72-.46.46-.72,1.08-.72,1.73v17.11c0,.65.26,1.27.72,1.73.46.46,1.08.72,1.73.72h31.77c.65,0,1.27-.26,1.73-.72s.72-1.08.72-1.73v-17.11c0-.65-.26-1.27-.72-1.73-.46-.46-1.08-.72-1.73-.72h-2.44" />
+      </svg>
+    ),
+  },
+  {
+    key: 'nav_sef',
+    label: 'Uplata u sef',
+    desc: 'Uplatite ili isplatite iz sefa',
+    icon: (
+      <svg width="20" height="19" viewBox="0 0 40 38" fill="var(--text-2)">
+        <path d="M7.5,38c-.7,0-1.36-.23-1.97-.7-.62-.47-1.02-1.03-1.23-1.7-.83-2.87-1.53-5.34-2.08-7.42-.55-2.08-.99-3.91-1.32-5.48-.33-1.57-.56-2.97-.7-4.19-.14-1.22-.21-2.39-.21-3.5,0-3.07,1.07-5.67,3.2-7.8,2.13-2.13,4.73-3.2,7.8-3.2h10c.9-1.2,2.04-2.17,3.42-2.9,1.38-.73,2.91-1.1,4.58-1.1.83,0,1.54.29,2.12.88s.88,1.29.88,2.12c0,.2-.03.4-.08.6s-.11.38-.17.55c-.13.37-.26.73-.38,1.1-.12.37-.21.77-.28,1.2l4.55,4.55h2.85c.42,0,.78.14,1.07.43.29.29.43.64.43,1.07v11.35c0,.34-.09.64-.28.91-.18.26-.44.44-.78.54l-4.6,1.51-2.7,9.03c-.2.65-.56,1.18-1.09,1.57-.53.39-1.13.58-1.81.58h-5.75c-.83,0-1.53-.29-2.12-.88-.59-.59-.88-1.29-.88-2.12v-1h-4v1c0,.83-.29,1.53-.88,2.12-.59.59-1.29.88-2.12.88h-5.5ZM7.25,35h5.75v-4h10v4h5.75l3.15-10.5,5.1-1.75v-8.75h-2.6l-6.4-6.4c.03-.57.12-1.26.28-2.07.15-.82.36-1.72.62-2.72-1.43.37-2.7.92-3.8,1.65-1.1.73-1.9,1.58-2.4,2.55h-11.7c-2.21,0-4.1.78-5.66,2.34-1.56,1.56-2.34,3.45-2.34,5.66,0,1.4.37,3.84,1.1,7.33.73,3.48,1.78,7.71,3.15,12.67ZM28,18c.57,0,1.04-.19,1.42-.58s.58-.86.58-1.42-.19-1.04-.58-1.42-.86-.58-1.42-.58-1.04.19-1.42.58-.58.86-.58,1.42.19,1.04.58,1.42.86.58,1.42.58ZM20.5,13c.42,0,.78-.14,1.07-.43.29-.29.43-.65.43-1.07s-.14-.78-.43-1.07c-.29-.28-.64-.43-1.07-.43h-7c-.42,0-.78.14-1.07.43-.29.29-.43.65-.43,1.07s.14.78.43,1.07c.29.28.64.42,1.07.42h7Z" />
+      </svg>
+    ),
+  },
+  {
+    key: 'nav_dugovi',
+    label: 'Pozajmica',
+    desc: 'Data ili primljena pozajmica',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 39 39" fill="none"
+        stroke="var(--text-2)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2.5,11.5C5.28,5.14,12.15,1.5,19.54,1.5c9.36,0,17.05,7.1,17.96,16.2" />
+        <path d="M10.52,12.3H2.58c-.6,0-1.08-.48-1.08-1.08h0V3.3" />
+        <path d="M36.5,27.5c-2.78,6.36-9.64,10-17.04,10-9.36,0-17.05-7.1-17.96-16.2" />
+        <path d="M28.48,26.7h7.94c.6,0,1.08.48,1.08,1.08,0,0,0,0,0v7.92" />
       </svg>
     ),
   },
@@ -99,7 +124,7 @@ function NavItem({ href, label, icon }: NavItemDef) {
   )
 }
 
-function Picker({ onSelect, onClose }: { onSelect: (key: 'transakcija' | 'cek') => void; onClose: () => void }) {
+function Picker({ onSelect, onClose }: { onSelect: (key: PickerKey) => void; onClose: () => void }) {
   return (
     <div
       style={{
@@ -160,6 +185,19 @@ function Picker({ onSelect, onClose }: { onSelect: (key: 'transakcija' | 'cek') 
 
 export default function BottomNav() {
   const [mode, setMode] = useState<Mode>(null)
+  const router = useRouter()
+
+  function handlePickerSelect(key: PickerKey) {
+    if (key === 'transakcija' || key === 'cek') {
+      setMode(key)
+    } else if (key === 'nav_sef') {
+      setMode(null)
+      router.push('/stednja')
+    } else if (key === 'nav_dugovi') {
+      setMode(null)
+      router.push('/dugovi')
+    }
+  }
 
   return (
     <>
@@ -194,7 +232,7 @@ export default function BottomNav() {
 
       {mode === 'picker' && (
         <Picker
-          onSelect={key => setMode(key)}
+          onSelect={handlePickerSelect}
           onClose={() => setMode(null)}
         />
       )}

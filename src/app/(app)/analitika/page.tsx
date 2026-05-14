@@ -24,17 +24,20 @@ export default async function AnalitikaPage() {
     { data: bucketsRaw },
     { data: savingsRaw },
     { data: savingsHistoryRaw },
+    { data: membersRaw },
   ] = await Promise.all([
-    supabase.from('transactions').select('type, amount, month, category_id').gte('date', from).lte('date', to),
+    supabase.from('transactions').select('type, amount, month, category_id, member_id').gte('date', from).lte('date', to),
     supabase.from('categories').select('id, name, bucket_id'),
     supabase.from('buckets').select('id, name'),
     supabase.from('savings').select('amount'),
     supabase.from('savings').select('amount, date').order('date', { ascending: true }),
+    supabase.from('members').select('id, name').order('created_at'),
   ])
 
   const txs = txsRaw ?? []
   const cats = catsRaw ?? []
   const buckets = bucketsRaw ?? []
+  const members = membersRaw ?? []
   const totalSavings = (savingsRaw ?? []).reduce((s: number, r: any) => s + r.amount, 0)
 
   const catMap = new Map(cats.map((c: any) => [c.id, { name: c.name, bucketId: c.bucket_id }]))
@@ -48,6 +51,7 @@ export default async function AnalitikaPage() {
 
     const catBreakdown: Record<string, number> = {}
     const bucketBreakdown: Record<string, number> = {}
+    const memberBreakdown: Record<string, { prihodi: number; rashodi: number }> = {}
 
     mTxs.filter((t: any) => t.type === 'rashod').forEach((t: any) => {
       if (t.category_id) {
@@ -62,6 +66,13 @@ export default async function AnalitikaPage() {
       }
     })
 
+    mTxs.forEach((t: any) => {
+      if (!t.member_id) return
+      if (!memberBreakdown[t.member_id]) memberBreakdown[t.member_id] = { prihodi: 0, rashodi: 0 }
+      if (t.type === 'prihod') memberBreakdown[t.member_id].prihodi += t.amount
+      else if (t.type === 'rashod') memberBreakdown[t.member_id].rashodi += t.amount
+    })
+
     const [year, mon] = m.split('-')
     const label = new Date(+year, +mon - 1, 1).toLocaleString('sr-Latn-RS', { month: 'short' })
     return {
@@ -72,6 +83,7 @@ export default async function AnalitikaPage() {
       bilans: prihodi - rashodi,
       catBreakdown,
       bucketBreakdown,
+      memberBreakdown,
     }
   })
 
@@ -93,6 +105,7 @@ export default async function AnalitikaPage() {
       monthlyData={monthlyData}
       savingsHistory={savingsHistory}
       totalSavings={totalSavings}
+      members={members}
     />
   )
 }

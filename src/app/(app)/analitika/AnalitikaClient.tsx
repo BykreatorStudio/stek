@@ -15,7 +15,10 @@ type MonthData = {
   bilans: number
   catBreakdown: Record<string, number>
   bucketBreakdown: Record<string, number>
+  memberBreakdown: Record<string, { prihodi: number; rashodi: number }>
 }
+
+type Member = { id: string; name: string }
 
 const PERIODS = [
   { label: '3M', value: 3 },
@@ -71,7 +74,7 @@ function StatCard({ label, value, color, sub }: { label: string; value: string; 
 
 function ChartCard({ title, children, noPad }: { title: string; children: React.ReactNode; noPad?: boolean }) {
   return (
-    <div style={{ background: 'var(--card)', borderRadius: 20, padding: noPad ? '20px 0 0' : '20px 16px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.03)' }}>
+    <div style={{ background: 'var(--card)', borderRadius: 20, padding: noPad ? '20px 0 0' : '20px 16px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.03)', userSelect: 'none' }}>
       <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginBottom: 20, paddingLeft: noPad ? 16 : 4 }}>{title}</p>
       {children}
     </div>
@@ -94,10 +97,12 @@ export default function AnalitikaClient({
   monthlyData,
   savingsHistory,
   totalSavings,
+  members,
 }: {
   monthlyData: MonthData[]
   savingsHistory: { label: string; value: number }[]
   totalSavings: number
+  members: Member[]
 }) {
   const [period, setPeriod] = useState(6)
 
@@ -142,6 +147,17 @@ export default function AnalitikaClient({
       .map(([name, value]) => ({ name, value, pct: total > 0 ? Math.round((value / total) * 100) : 0 }))
       .sort((a, b) => b.value - a.value)
   }, [slice])
+
+  const memberData = useMemo(() => {
+    return members.map(m => {
+      let prihodi = 0, rashodi = 0
+      slice.forEach(month => {
+        const mb = month.memberBreakdown[m.id]
+        if (mb) { prihodi += mb.prihodi; rashodi += mb.rashodi }
+      })
+      return { ...m, prihodi, rashodi }
+    }).filter(m => m.prihodi > 0 || m.rashodi > 0)
+  }, [members, slice])
 
   const hasSavings = savingsHistory.length > 1
 
@@ -301,6 +317,40 @@ export default function AnalitikaClient({
                   </div>
                 </div>
               ))}
+            </div>
+          </ChartCard>
+        )}
+
+        {/* Po članovima */}
+        {memberData.length > 0 && (
+          <ChartCard title="Po članovima" noPad>
+            <div style={{ borderTop: '1px solid var(--border)' }}>
+              {memberData.map((m, i) => {
+                const total = m.prihodi + m.rashodi
+                return (
+                  <div key={m.id} style={{ padding: '14px 16px', borderBottom: i < memberData.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                    <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', marginBottom: 10 }}>{m.name}</p>
+                    {m.prihodi > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                        <p style={{ fontSize: 11, color: 'var(--text-3)', width: 52, flexShrink: 0 }}>Prihodi</p>
+                        <div style={{ flex: 1, height: 4, borderRadius: 4, background: 'var(--border-2)' }}>
+                          <div style={{ height: '100%', borderRadius: 4, background: '#C8FF31', width: `${total > 0 ? Math.round((m.prihodi / total) * 100) : 0}%` }} />
+                        </div>
+                        <p className="num" style={{ fontSize: 12, color: 'var(--accent)', flexShrink: 0, minWidth: 60, textAlign: 'right' }}>+{fmt(m.prihodi)}</p>
+                      </div>
+                    )}
+                    {m.rashodi > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <p style={{ fontSize: 11, color: 'var(--text-3)', width: 52, flexShrink: 0 }}>Rashodi</p>
+                        <div style={{ flex: 1, height: 4, borderRadius: 4, background: 'var(--border-2)' }}>
+                          <div style={{ height: '100%', borderRadius: 4, background: '#f87171', width: `${total > 0 ? Math.round((m.rashodi / total) * 100) : 0}%` }} />
+                        </div>
+                        <p className="num" style={{ fontSize: 12, color: 'var(--red)', flexShrink: 0, minWidth: 60, textAlign: 'right' }}>-{fmt(m.rashodi)}</p>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </ChartCard>
         )}
