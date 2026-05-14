@@ -8,12 +8,16 @@ export default async function StednjaPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: hm } = await supabase.from('household_members').select('household_id').eq('user_id', user.id).single()
-  const householdId = hm?.household_id ?? ''
+  const now = new Date()
+  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const monthStart = `${month}-01`
+  const monthEnd = `${month}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`
 
-  const [{ data: sefoviRaw }, { data: savingsRaw }] = await Promise.all([
+  const [{ data: sefoviRaw }, { data: savingsRaw }, { data: txsRaw }, { data: savingsThisMonthRaw }] = await Promise.all([
     supabase.from('sefovi').select('*').order('created_at', { ascending: true }),
     supabase.from('savings').select('*, member:members(id, name, color)').order('date', { ascending: false }).order('created_at', { ascending: false }),
+    supabase.from('transactions').select('type, amount').eq('month', month),
+    supabase.from('savings').select('amount').gte('date', monthStart).lte('date', monthEnd),
   ])
 
   const savings = savingsRaw ?? []
@@ -25,6 +29,11 @@ export default async function StednjaPage() {
 
   const totalBalance = sefovi.reduce((acc: number, s: any) => acc + s.balance, 0)
   const hasItems = sefovi.some((s: any) => s.items.length > 0)
+
+  const prihodi = (txsRaw ?? []).filter((t: any) => t.type === 'prihod').reduce((s: number, t: any) => s + t.amount, 0)
+  const rashodi = (txsRaw ?? []).filter((t: any) => t.type === 'rashod').reduce((s: number, t: any) => s + t.amount, 0)
+  const netSavingsThisMonth = (savingsThisMonthRaw ?? []).reduce((s: number, r: any) => s + r.amount, 0)
+  const availableBudget = prihodi - rashodi - netSavingsThisMonth
 
   return (
     <div>
@@ -51,7 +60,7 @@ export default async function StednjaPage() {
       </div>
 
       <div style={{ maxWidth: 520, margin: '0 auto', padding: '20px 16px' }}>
-        <StednjaClient sefovi={sefovi} />
+        <StednjaClient sefovi={sefovi} availableBudget={availableBudget} />
       </div>
     </div>
   )

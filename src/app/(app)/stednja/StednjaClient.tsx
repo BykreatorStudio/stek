@@ -79,7 +79,7 @@ function CreateSefModal({ onClose }: { onClose: () => void }) {
 
 type View = 'detail' | 'uplata' | 'isplata' | 'calendar'
 
-function SefDetailSheet({ sef, onClose }: { sef: Sef; onClose: () => void }) {
+function SefDetailSheet({ sef, onClose, availableBudget }: { sef: Sef; onClose: () => void; availableBudget: number }) {
   const [view, setView] = useState<View>('detail')
   const [amount, setAmount] = useState('')
   const [date, setDate] = useState(today())
@@ -111,24 +111,20 @@ function SefDetailSheet({ sef, onClose }: { sef: Sef; onClose: () => void }) {
       setErrMsg(`Nema dovoljno u sefu. Stanje: ${fmt(sef.balance)} RSD`)
       return
     }
+    if (type === 'uplata' && a > availableBudget) {
+      setErrMsg(availableBudget <= 0
+        ? 'Nema slobodnog budžeta za ovaj mesec.'
+        : `Maksimalno možeš uplatiti ${fmt(availableBudget)} RSD.`)
+      return
+    }
     setErrMsg('')
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
     await supabase.from('savings').insert({
       sef_id: sef.id,
       amount: type === 'uplata' ? a : -a,
       currency: 'RSD', date,
       note: note.trim() || null,
       member_id: currentMember?.id ?? null,
-    })
-    await supabase.from('transactions').insert({
-      bucket_id: null, category_id: null,
-      user_id: user!.id,
-      type: type === 'uplata' ? 'rashod' : 'prihod',
-      amount: a, currency: 'RSD', date,
-      month: date.slice(0, 7),
-      name: type === 'uplata' ? `Uplata u sef · ${sef.name}` : `Isplata iz sefa · ${sef.name}`,
-      note: note.trim() || null,
     })
     const fmtN = (n: number) => new Intl.NumberFormat('sr-Latn-RS').format(Math.round(n))
     notifyHousehold({
@@ -322,7 +318,7 @@ function SefDetailSheet({ sef, onClose }: { sef: Sef; onClose: () => void }) {
   )
 }
 
-export default function StednjaClient({ sefovi }: { sefovi: Sef[] }) {
+export default function StednjaClient({ sefovi, availableBudget }: { sefovi: Sef[]; availableBudget: number }) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<Sef | null>(null)
@@ -396,7 +392,7 @@ export default function StednjaClient({ sefovi }: { sefovi: Sef[] }) {
         </svg>
       </button>
 
-      {selected && <SefDetailSheet sef={selected} onClose={() => setSelectedId(null)} />}
+      {selected && <SefDetailSheet sef={selected} onClose={() => setSelectedId(null)} availableBudget={availableBudget} />}
       {showCreate && <CreateSefModal onClose={() => setShowCreate(false)} />}
 
       {confirmDelete && (
