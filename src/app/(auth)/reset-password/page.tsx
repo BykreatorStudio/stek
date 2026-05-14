@@ -27,28 +27,31 @@ function ResetPasswordInner() {
       supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' }).then(({ error }) => {
         if (error) {
           setError('Link za reset lozinke je istekao ili je već iskorišćen. Zatražite novi.')
+          setExchanging(false)
+        } else {
+          router.replace('/reset-password')
+          setExchanging(false)
         }
-        setExchanging(false)
       })
     } else if (code) {
       supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
         if (error) {
           setError('Link za reset lozinke je istekao ili je već iskorišćen. Zatražite novi.')
+          setExchanging(false)
+        } else {
+          router.replace('/reset-password')
+          setExchanging(false)
         }
-        setExchanging(false)
       })
     } else {
-      router.replace('/forgot-password')
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          setExchanging(false)
+        } else {
+          router.replace('/forgot-password')
+        }
+      })
     }
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setExchanging(false)
-        setError('')
-      }
-    })
-
-    return () => subscription.unsubscribe()
   }, [])
 
   const match = password.length >= 6 && password === confirm
