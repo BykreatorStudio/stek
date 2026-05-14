@@ -12,6 +12,17 @@ function fmtDateShort(v: string) {
   return d.toLocaleDateString('sr-Latn-RS', { day: 'numeric', month: 'short' })
 }
 
+function txColor(type: string) {
+  if (type === 'prihod' || type === 'sef_isplata') return 'var(--accent)'
+  if (type === 'sef_uplata') return '#0f766e'
+  return 'var(--text-1)'
+}
+
+function txPrefix(type: string) {
+  if (type === 'prihod' || type === 'sef_isplata') return '+'
+  return '-'
+}
+
 function TxRow({ t, border }: { t: any; border?: boolean }) {
   return (
     <div style={{
@@ -23,8 +34,8 @@ function TxRow({ t, border }: { t: any; border?: boolean }) {
         <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</p>
         <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>{fmtDateShort(t.date)}</p>
       </div>
-      <p className="num" style={{ fontSize: 14, fontWeight: 500, flexShrink: 0, marginLeft: 12, color: t.type === 'prihod' ? 'var(--accent)' : 'var(--text-1)' }}>
-        {t.type === 'prihod' ? '+' : '-'}{fmt(t.amount)}
+      <p className="num" style={{ fontSize: 14, fontWeight: 500, flexShrink: 0, marginLeft: 12, color: txColor(t.type) }}>
+        {txPrefix(t.type)}{fmt(t.amount)}
         <span style={{ fontSize: 10, fontWeight: 400, marginLeft: 3, opacity: 0.6 }}>{t.currency}</span>
       </p>
     </div>
@@ -41,11 +52,22 @@ export default function TransakcijeSection({ recentTxs }: { recentTxs: any[] }) 
     setShowAll(true)
     if (allTxs.length === 0) {
       setLoading(true)
-      const { data } = await supabase
-        .from('transactions')
-        .select('id, type, name, amount, currency, date, created_at')
-        .order('created_at', { ascending: false })
-      setAllTxs(data ?? [])
+      const [{ data: txData }, { data: savData }] = await Promise.all([
+        supabase.from('transactions').select('id, type, name, amount, currency, date, created_at').order('created_at', { ascending: false }),
+        supabase.from('savings').select('id, amount, date, created_at, sef:sefovi(name)').order('created_at', { ascending: false }),
+      ])
+      const savEntries = (savData ?? []).map((s: any) => ({
+        id: `sef-${s.id}`,
+        type: s.amount > 0 ? 'sef_uplata' : 'sef_isplata',
+        name: s.amount > 0 ? `Uplata u sef "${s.sef?.name ?? 'Sef'}"` : `Isplata iz sefa "${s.sef?.name ?? 'Sef'}"`,
+        amount: Math.abs(s.amount),
+        currency: 'RSD',
+        date: s.date,
+        created_at: s.created_at,
+      }))
+      const merged = [...(txData ?? []), ...savEntries]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      setAllTxs(merged)
       setLoading(false)
     }
   }
@@ -62,8 +84,8 @@ export default function TransakcijeSection({ recentTxs }: { recentTxs: any[] }) 
               <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</p>
               <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>{fmtDateShort(t.date)}</p>
             </div>
-            <p className="num" style={{ fontSize: 14, fontWeight: 500, flexShrink: 0, marginLeft: 12, color: t.type === 'prihod' ? 'var(--accent)' : 'var(--text-1)' }}>
-              {t.type === 'prihod' ? '+' : '-'}{fmt(t.amount)}
+            <p className="num" style={{ fontSize: 14, fontWeight: 500, flexShrink: 0, marginLeft: 12, color: txColor(t.type) }}>
+              {txPrefix(t.type)}{fmt(t.amount)}
               <span style={{ fontSize: 10, fontWeight: 400, marginLeft: 3, opacity: 0.6 }}>{t.currency}</span>
             </p>
           </div>
@@ -101,7 +123,7 @@ export default function TransakcijeSection({ recentTxs }: { recentTxs: any[] }) 
             <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 8px', flexShrink: 0 }}>
               <div style={{ width: 36, height: 4, borderRadius: 4, background: 'var(--border-2)' }} />
             </div>
-            <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-1)', padding: '4px 20px 16px', flexShrink: 0 }}>Sve transakcije</p>
+            <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-1)', padding: '4px 20px 16px', flexShrink: 0 }}>Sve aktivnosti</p>
 
             <div style={{ overflowY: 'auto', paddingBottom: 'calc(20px + var(--safe-bottom))' }}>
               {loading ? (

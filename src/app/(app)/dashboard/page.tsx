@@ -54,6 +54,7 @@ export default async function DashboardPage() {
     { data: membersRaw },
     { data: nbsRateRaw },
     { data: recentTxsRaw },
+    { data: recentSavingsRaw },
   ] = await Promise.all([
     supabase.from('members').select('name').eq('user_id', user.id).single(),
     supabase.from('transactions').select('*').eq('month', month),
@@ -69,6 +70,7 @@ export default async function DashboardPage() {
     supabase.from('members').select('*').order('created_at'),
     supabase.from('nbs_rates').select('eur_to_rsd').order('date', { ascending: false }).limit(1).single(),
     supabase.from('transactions').select('id, type, name, amount, currency, date, created_at').order('created_at', { ascending: false }).limit(10),
+    supabase.from('savings').select('id, amount, date, created_at, sef:sefovi(name)').order('created_at', { ascending: false }).limit(10),
   ])
 
   const transactions = txs ?? []
@@ -81,6 +83,18 @@ export default async function DashboardPage() {
   const debtPays = debtPaysRaw ?? []
   const members = membersRaw ?? []
   const recentTxs = recentTxsRaw ?? []
+  const savingsEntries = (recentSavingsRaw ?? []).map((s: any) => ({
+    id: `sef-${s.id}`,
+    type: s.amount > 0 ? 'sef_uplata' : 'sef_isplata',
+    name: s.amount > 0 ? `Uplata u sef "${s.sef?.name ?? 'Sef'}"` : `Isplata iz sefa "${s.sef?.name ?? 'Sef'}"`,
+    amount: Math.abs(s.amount),
+    currency: 'RSD',
+    date: s.date,
+    created_at: s.created_at,
+  }))
+  const allRecent = [...recentTxs, ...savingsEntries]
+    .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 10)
   const eurToRsd: number = (nbsRateRaw as any)?.eur_to_rsd ?? 117
 
   // --- Month cash flow ---
@@ -398,7 +412,7 @@ export default async function DashboardPage() {
         )}
 
         {/* --- Poslednje transakcije --- */}
-        <TransakcijeSection recentTxs={recentTxs} />
+        <TransakcijeSection recentTxs={allRecent} />
 
         {/* --- Uskoro za naplatu --- */}
         {upcomingItems.length > 0 && (
@@ -434,7 +448,7 @@ export default async function DashboardPage() {
           </>
         )}
 
-        {!hasData && recentTxs.length === 0 && (
+        {!hasData && allRecent.length === 0 && (
           <div className="card" style={{ padding: '24px 20px', textAlign: 'center', marginTop: 8 }}>
             <p style={{ fontSize: 14, color: 'var(--text-3)' }}>
               Pritisni <span style={{ fontWeight: 500 }}>+</span> da dodaš prvu transakciju
