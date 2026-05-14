@@ -46,13 +46,14 @@ export async function POST(request: NextRequest) {
     external_key: externalKey || null,
   })
 
-  let subsQuery = supabase.from('push_subscriptions').select('endpoint, p256dh, auth_key, user_id')
+  let subsQuery = supabase.from('push_subscriptions').select('subscription, user_id')
   if (householdId) subsQuery = subsQuery.eq('household_id', householdId)
   const { data: subs } = await subsQuery
 
-  if (!subs?.length) return NextResponse.json({ ok: true })
+  const validSubs = (subs ?? []).filter((s: any) => s.subscription?.endpoint)
+  if (!validSubs.length) return NextResponse.json({ ok: true })
 
-  const userIds = subs.map((s: any) => s.user_id).filter(Boolean)
+  const userIds = validSubs.map((s: any) => s.user_id).filter(Boolean)
   const { data: prefs } = await supabase
     .from('household_members')
     .select('user_id, notif_enabled, notif_bills, notif_pozajmice, notif_cekovi, notif_ostalo')
@@ -72,11 +73,11 @@ export async function POST(request: NextRequest) {
 
   const payload = JSON.stringify({ title, body, data })
   await Promise.all(
-    subs
+    validSubs
       .filter((s: any) => s.user_id !== senderUserId && wantsNotif(s.user_id))
       .map((s: any) =>
         webpush.sendNotification(
-          { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth_key } },
+          { endpoint: s.subscription.endpoint, keys: { p256dh: s.subscription.keys.p256dh, auth: s.subscription.keys.auth } },
           payload
         ).catch(() => {})
       )

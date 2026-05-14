@@ -23,10 +23,12 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  await supabase.from('push_subscriptions').upsert(
-    { user_id: user.id, household_id: householdId, endpoint, p256dh, auth_key: auth },
-    { onConflict: 'endpoint' }
-  )
+  await supabase.from('push_subscriptions').delete().eq('user_id', user.id)
+  await supabase.from('push_subscriptions').insert({
+    user_id: user.id,
+    household_id: householdId,
+    subscription: { endpoint, keys: { p256dh, auth } },
+  })
 
   return NextResponse.json({ ok: true })
 }

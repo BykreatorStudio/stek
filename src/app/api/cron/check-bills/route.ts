@@ -19,11 +19,13 @@ async function sendPushToHousehold(
 ) {
   const { data: subs } = await supabase
     .from('push_subscriptions')
-    .select('endpoint, p256dh, auth_key, user_id')
+    .select('subscription, user_id')
     .eq('household_id', householdId)
-  if (!subs?.length) return
 
-  const userIds = subs.map((s: any) => s.user_id).filter(Boolean)
+  const validSubs = (subs ?? []).filter((s: any) => s.subscription?.endpoint)
+  if (!validSubs.length) return
+
+  const userIds = validSubs.map((s: any) => s.user_id).filter(Boolean)
   const { data: prefs } = await supabase
     .from('household_members')
     .select('user_id, notif_enabled, notif_bills, notif_pozajmice, notif_cekovi, notif_ostalo')
@@ -32,7 +34,7 @@ async function sendPushToHousehold(
 
   const payload = JSON.stringify({ title, body })
   await Promise.all(
-    subs
+    validSubs
       .filter((s: any) => {
         const p: any = prefMap.get(s.user_id)
         if (!p) return true
@@ -44,7 +46,7 @@ async function sendPushToHousehold(
       })
       .map((s: any) =>
         webpush.sendNotification(
-          { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth_key } },
+          { endpoint: s.subscription.endpoint, keys: { p256dh: s.subscription.keys.p256dh, auth: s.subscription.keys.auth } },
           payload
         ).catch(() => {})
       )
