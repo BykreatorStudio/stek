@@ -31,14 +31,12 @@ export async function POST() {
       .neq('user_id', user.id)
 
     for (const m of others ?? []) {
-      if (m.user_id) {
-        await supabaseAdmin.from('household_members').delete().eq('user_id', m.user_id)
-        await supabaseAdmin.from('members').update({ user_id: null }).eq('user_id', m.user_id)
-        await supabaseAdmin.auth.admin.deleteUser(m.user_id)
-      }
+      if (!m.user_id) continue
+      await supabaseAdmin.from('household_members').delete().eq('user_id', m.user_id)
+      await supabaseAdmin.from('members').update({ user_id: null }).eq('user_id', m.user_id)
+      const { error: delErr } = await supabaseAdmin.auth.admin.deleteUser(m.user_id)
+      if (delErr) return NextResponse.json({ error: `Greška pri brisanju člana: ${delErr.message}` }, { status: 500 })
     }
-
-    await supabaseAdmin.from('households').delete().eq('id', membership.household_id)
   }
 
   await supabaseAdmin.from('members').update({ user_id: null }).eq('user_id', user.id)
