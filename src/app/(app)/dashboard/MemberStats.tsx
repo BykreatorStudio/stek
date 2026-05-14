@@ -123,22 +123,25 @@ export default function MemberStats({ memberStats, month }: { memberStats: Membe
               <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 {[...selected.txs]
                   .sort((a, b) => new Date(b.date + 'T00:00:00').getTime() - new Date(a.date + 'T00:00:00').getTime())
-                  .map((t, i, arr) => (
-                    <div key={t.id} style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '13px 20px',
-                      borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none',
-                    }}>
-                      <div style={{ minWidth: 0 }}>
-                        <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</p>
-                        <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>{fmtDateShort(t.date)}</p>
+                  .map((t, i, arr) => {
+                    const sub = [t.category?.bucket?.name, t.category?.name, fmtDateShort(t.date)].filter(Boolean).join(' · ')
+                    return (
+                      <div key={t.id} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '13px 20px',
+                        borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none',
+                      }}>
+                        <div style={{ minWidth: 0 }}>
+                          <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name || '—'}</p>
+                          <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub || fmtDateShort(t.date)}</p>
+                        </div>
+                        <p className="num" style={{ fontSize: 14, fontWeight: 500, flexShrink: 0, marginLeft: 12, color: t.type === 'prihod' ? 'var(--accent)' : 'var(--text-1)' }}>
+                          {t.type === 'prihod' ? '+' : '-'}{fmt(t.amount)}
+                          <span style={{ fontSize: 10, fontWeight: 400, marginLeft: 3, opacity: 0.6 }}>{t.currency}</span>
+                        </p>
                       </div>
-                      <p className="num" style={{ fontSize: 14, fontWeight: 500, flexShrink: 0, marginLeft: 12, color: t.type === 'prihod' ? 'var(--accent)' : 'var(--text-1)' }}>
-                        {t.type === 'prihod' ? '+' : '-'}{fmt(t.amount)}
-                        <span style={{ fontSize: 10, fontWeight: 400, marginLeft: 3, opacity: 0.6 }}>{t.currency}</span>
-                      </p>
-                    </div>
-                  ))}
+                    )
+                  })}
               </div>
             </div>
           </div>

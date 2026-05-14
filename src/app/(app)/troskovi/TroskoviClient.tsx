@@ -129,6 +129,7 @@ function PayRecurringModal({ item, month, eurToRsd, onClose }: { item: Recurring
     const { error } = await supabase.from('transactions').insert({
       bucket_id: item.bucket_id, category_id: item.category_id,
       recurring_item_id: item.id, user_id: user!.id,
+      member_id: currentMember?.id ?? null, name: item.name,
       type: 'rashod', amount: a, currency, date, month,
     })
     setLoading(false)

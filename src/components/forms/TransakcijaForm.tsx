@@ -69,7 +69,7 @@ export default function TransakcijaForm({ onClose }: { onClose: () => void }) {
     await supabase.from('transactions').insert({
       bucket_id: type === 'rashod' ? bucketId : null,
       category_id: type === 'rashod' ? categoryId : null,
-      user_id: user!.id,
+      user_id: user!.id, member_id: currentMember?.id ?? null,
       type, amount: a, currency,
       date, month: date.slice(0, 7), name: name.trim(), note: note.trim() || null,
     })

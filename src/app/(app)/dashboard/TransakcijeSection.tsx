@@ -24,6 +24,7 @@ function txPrefix(type: string) {
 }
 
 function TxRow({ t, border }: { t: any; border?: boolean }) {
+  const sub = [t.member?.name, t.category?.bucket?.name, t.category?.name, fmtDateShort(t.date)].filter(Boolean).join(' · ')
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -31,8 +32,8 @@ function TxRow({ t, border }: { t: any; border?: boolean }) {
       borderBottom: border ? '1px solid var(--border)' : 'none',
     }}>
       <div style={{ minWidth: 0 }}>
-        <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</p>
-        <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>{fmtDateShort(t.date)}</p>
+        <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name || '—'}</p>
+        <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</p>
       </div>
       <p className="num" style={{ fontSize: 14, fontWeight: 500, flexShrink: 0, marginLeft: 12, color: txColor(t.type) }}>
         {txPrefix(t.type)}{fmt(t.amount)}
@@ -53,7 +54,7 @@ export default function TransakcijeSection({ recentTxs }: { recentTxs: any[] }) 
     if (allTxs.length === 0) {
       setLoading(true)
       const [{ data: txData }, { data: savData }] = await Promise.all([
-        supabase.from('transactions').select('id, type, name, amount, currency, date, created_at').order('created_at', { ascending: false }),
+        supabase.from('transactions').select('id, type, name, amount, currency, date, created_at, member:members(name), category:categories(name, bucket:buckets(name))').order('created_at', { ascending: false }),
         supabase.from('savings').select('id, amount, date, created_at, sef:sefovi(name)').order('created_at', { ascending: false }),
       ])
       const savEntries = (savData ?? []).map((s: any) => ({
@@ -78,18 +79,21 @@ export default function TransakcijeSection({ recentTxs }: { recentTxs: any[] }) 
     <>
       <p className="section-label">Poslednje</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-        {recentTxs.map((t: any) => (
-          <div key={t.id} className="card" style={{ padding: '13px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ minWidth: 0 }}>
-              <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</p>
-              <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>{fmtDateShort(t.date)}</p>
+        {recentTxs.map((t: any) => {
+          const sub = [t.member?.name, t.category?.bucket?.name, t.category?.name, fmtDateShort(t.date)].filter(Boolean).join(' · ')
+          return (
+            <div key={t.id} className="card" style={{ padding: '13px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name || '—'}</p>
+                <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</p>
+              </div>
+              <p className="num" style={{ fontSize: 14, fontWeight: 500, flexShrink: 0, marginLeft: 12, color: txColor(t.type) }}>
+                {txPrefix(t.type)}{fmt(t.amount)}
+                <span style={{ fontSize: 10, fontWeight: 400, marginLeft: 3, opacity: 0.6 }}>{t.currency}</span>
+              </p>
             </div>
-            <p className="num" style={{ fontSize: 14, fontWeight: 500, flexShrink: 0, marginLeft: 12, color: txColor(t.type) }}>
-              {txPrefix(t.type)}{fmt(t.amount)}
-              <span style={{ fontSize: 10, fontWeight: 400, marginLeft: 3, opacity: 0.6 }}>{t.currency}</span>
-            </p>
-          </div>
-        ))}
+          )
+        })}
         <button
           onClick={openAll}
           style={{

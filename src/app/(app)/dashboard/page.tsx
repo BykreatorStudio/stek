@@ -58,7 +58,7 @@ export default async function DashboardPage() {
     { data: recentSavingsRaw },
   ] = await Promise.all([
     supabase.from('members').select('name').eq('user_id', user.id).single(),
-    supabase.from('transactions').select('*').eq('month', month),
+    supabase.from('transactions').select('*, member:members(name), category:categories(name, bucket:buckets(name))').eq('month', month),
     supabase.from('recurring_items').select('*').eq('is_active', true),
     supabase.from('cekovi').select('id, quantity, status').gte('date', monthStart).lte('date', monthEnd),
     supabase.from('cekovi').select('id, quantity, date').eq('status', 'na_cekanju'),
@@ -70,7 +70,7 @@ export default async function DashboardPage() {
     supabase.from('savings').select('amount').gte('date', monthStart).lte('date', monthEnd),
     supabase.from('members').select('*').order('created_at'),
     supabase.from('nbs_rates').select('eur_to_rsd').order('date', { ascending: false }).limit(1).single(),
-    supabase.from('transactions').select('id, type, name, amount, currency, date, created_at').order('created_at', { ascending: false }).limit(10),
+    supabase.from('transactions').select('id, type, name, amount, currency, date, created_at, member:members(name), category:categories(name, bucket:buckets(name))').order('created_at', { ascending: false }).limit(10),
     supabase.from('savings').select('id, amount, date, created_at, sef:sefovi(name)').order('created_at', { ascending: false }).limit(10),
   ])
 
