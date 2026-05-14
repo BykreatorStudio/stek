@@ -95,17 +95,27 @@ export default function NotifikacijePage() {
       currentUserIdRef.current = user.id
       setCurrentUserId(user.id)
 
-      const [{ data: member }, { data: hm }, { data: notifs }] = await Promise.all([
+      const [{ data: member }, { data: hm }] = await Promise.all([
         supabase.from('members').select('id').eq('user_id', user.id).single(),
         supabase.from('household_members').select('household_id').eq('user_id', user.id).single(),
-        supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(100),
       ])
 
       if (member) {
         myMemberIdRef.current = member.id
         setMyMemberId(member.id)
       }
-      if (hm) setHouseholdId(hm.household_id)
+      const hid = hm?.household_id ?? null
+      if (hid) setHouseholdId(hid)
+
+      if (!hid) { setLoading(false); return }
+
+      const { data: notifs } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('household_id', hid)
+        .order('created_at', { ascending: false })
+        .limit(100)
+
       setNotifications(notifs ?? [])
       setLoading(false)
 

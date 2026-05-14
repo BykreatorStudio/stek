@@ -38,6 +38,8 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  if (!householdId) return NextResponse.json({ ok: true })
+
   await supabase.from('notifications').insert({
     triggered_by_member_id: triggeredByMemberId || null,
     household_id: householdId,
@@ -46,9 +48,10 @@ export async function POST(request: NextRequest) {
     external_key: externalKey || null,
   })
 
-  let subsQuery = supabase.from('push_subscriptions').select('subscription, user_id')
-  if (householdId) subsQuery = subsQuery.eq('household_id', householdId)
-  const { data: subs } = await subsQuery
+  const { data: subs } = await supabase
+    .from('push_subscriptions')
+    .select('subscription, user_id')
+    .eq('household_id', householdId)
 
   const validSubs = (subs ?? []).filter((s: any) => s.subscription?.endpoint)
   if (!validSubs.length) return NextResponse.json({ ok: true })

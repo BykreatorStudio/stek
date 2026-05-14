@@ -31,9 +31,11 @@ export default function NotifBell() {
       const householdId = hm?.household_id ?? null
 
       async function refreshCount() {
+        if (!householdId) { if (mounted) setCount(0); return }
         let q = supabase
           .from('notifications')
           .select('id', { count: 'exact', head: true })
+          .eq('household_id', householdId)
           .not('read_by', 'cs', `{${userId}}`)
         if (memberId) q = q.or(`triggered_by_member_id.is.null,triggered_by_member_id.neq.${memberId}`)
         const { count: c } = await q

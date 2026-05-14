@@ -10,7 +10,7 @@ import SwipeActions from '@/components/ui/SwipeActions'
 
 type Member = { id: string; name: string; color: string }
 type Saving = { id: string; amount: number; currency: string; date: string; note: string | null; member?: Member | null }
-type Sef = { id: string; name: string; household_id: string; created_at: string; items: Saving[]; balance: number }
+type Sef = { id: string; name: string; household_id: string; created_at: string; items: Saving[]; balance: number; target_amount: number | null }
 
 function fmt(n: number) {
   return new Intl.NumberFormat('sr-Latn-RS').format(Math.round(Math.abs(n)))
@@ -23,8 +23,13 @@ function fmtDate(v: string) {
 
 function today() { return new Date().toISOString().split('T')[0] }
 
+function progressPct(balance: number, target: number) {
+  return Math.min(100, Math.max(0, Math.round((balance / target) * 100)))
+}
+
 function CreateSefModal({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState('')
+  const [targetAmount, setTargetAmount] = useState('')
   const [loading, setLoading] = useState(false)
   const supabase = createClient()
   const router = useRouter()
@@ -36,7 +41,12 @@ function CreateSefModal({ onClose }: { onClose: () => void }) {
     if (!user) { setLoading(false); return }
     const { data: hm } = await supabase.from('household_members').select('household_id').eq('user_id', user.id).single()
     if (!hm?.household_id) { setLoading(false); return }
-    await supabase.from('sefovi').insert({ name: name.trim(), household_id: hm.household_id })
+    const targetAmt = parseAmount(targetAmount)
+    await supabase.from('sefovi').insert({
+      name: name.trim(),
+      household_id: hm.household_id,
+      target_amount: targetAmt && targetAmt > 0 ? targetAmt : null,
+    })
     setLoading(false)
     onClose()
     router.refresh()
@@ -65,9 +75,25 @@ function CreateSefModal({ onClose }: { onClose: () => void }) {
               width: '100%', padding: '13px 16px', fontSize: 14,
               color: 'var(--text-1)', border: '1.5px solid var(--border)',
               borderRadius: 12, background: 'var(--card)',
-              outline: 'none', fontFamily: 'inherit', marginBottom: 16,
+              outline: 'none', fontFamily: 'inherit', marginBottom: 10,
             }}
           />
+          <div style={{ position: 'relative', marginBottom: 16 }}>
+            <AmountInput
+              value={targetAmount}
+              onChange={setTargetAmount}
+              placeholder="Cilj štednje (opciono)"
+              style={{
+                width: '100%', padding: '13px 16px', fontSize: 14,
+                color: 'var(--text-1)', border: '1.5px solid var(--border)',
+                borderRadius: 12, background: 'var(--card)',
+                outline: 'none', fontFamily: 'inherit',
+              }}
+            />
+            {targetAmount && (
+              <span style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: 'var(--text-3)', pointerEvents: 'none' }}>RSD</span>
+            )}
+          </div>
           <button onClick={handleSave} disabled={loading || !name.trim()} className="btn-primary">
             {loading ? 'Čuvanje...' : 'Kreiraj sef'}
           </button>
@@ -77,7 +103,7 @@ function CreateSefModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-type View = 'detail' | 'uplata' | 'isplata' | 'calendar'
+type View = 'detail' | 'uplata' | 'isplata' | 'calendar' | 'goal'
 
 function SefDetailSheet({ sef, onClose, availableBudget }: { sef: Sef; onClose: () => void; availableBudget: number }) {
   const [view, setView] = useState<View>('detail')
@@ -86,6 +112,7 @@ function SefDetailSheet({ sef, onClose, availableBudget }: { sef: Sef; onClose: 
   const [note, setNote] = useState('')
   const [loading, setLoading] = useState(false)
   const [errMsg, setErrMsg] = useState('')
+  const [goalAmount, setGoalAmount] = useState('')
   const [currentMember, setCurrentMember] = useState<{ id: string; name: string } | null>(null)
   const callerView = useRef<'uplata' | 'isplata'>('uplata')
   const supabase = createClient()
@@ -139,6 +166,25 @@ function SefDetailSheet({ sef, onClose, availableBudget }: { sef: Sef; onClose: 
     router.refresh()
   }
 
+  async function handleSetGoal() {
+    const a = parseAmount(goalAmount)
+    if (!a || a <= 0) return
+    setLoading(true)
+    await supabase.from('sefovi').update({ target_amount: a }).eq('id', sef.id)
+    setLoading(false)
+    setGoalAmount('')
+    setView('detail')
+    router.refresh()
+  }
+
+  async function handleClearGoal() {
+    setLoading(true)
+    await supabase.from('sefovi').update({ target_amount: null }).eq('id', sef.id)
+    setLoading(false)
+    setView('detail')
+    router.refresh()
+  }
+
   const transColor = view === 'uplata' ? 'var(--accent)' : 'var(--red)'
 
   return (
@@ -170,6 +216,51 @@ function SefDetailSheet({ sef, onClose, availableBudget }: { sef: Sef; onClose: 
               onClose={() => setView(callerView.current)}
               inline
             />
+          </div>
+
+        ) : view === 'goal' ? (
+          <div style={{ padding: '8px 20px', paddingBottom: 'calc(28px + var(--safe-bottom))' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+              <button
+                onClick={() => { setView('detail'); setGoalAmount('') }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px 4px 0', display: 'flex', alignItems: 'center' }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </button>
+              <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-1)' }}>Cilj štednje</span>
+            </div>
+            <div style={{ textAlign: 'center', marginBottom: 24 }}>
+              <AmountInput
+                value={goalAmount}
+                onChange={setGoalAmount}
+                placeholder="0"
+                className="num"
+                style={{
+                  fontSize: 52, fontWeight: 500, color: 'var(--text-1)',
+                  border: 'none', outline: 'none', background: 'transparent',
+                  fontFamily: 'inherit', width: '100%', textAlign: 'center',
+                }}
+              />
+              <p style={{ fontSize: 13, color: 'var(--text-3)' }}>RSD</p>
+            </div>
+            <button onClick={handleSetGoal} disabled={loading || !goalAmount} className="btn-primary" style={{ marginBottom: 10 }}>
+              {loading ? 'Čuvanje...' : 'Postavi cilj'}
+            </button>
+            {sef.target_amount && (
+              <button
+                onClick={handleClearGoal}
+                disabled={loading}
+                style={{
+                  width: '100%', padding: '13px', borderRadius: 12, fontSize: 14,
+                  border: '1.5px solid var(--border)', background: 'transparent',
+                  color: 'var(--red)', cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                Ukloni cilj
+              </button>
+            )}
           </div>
 
         ) : view === 'uplata' || view === 'isplata' ? (
@@ -243,14 +334,30 @@ function SefDetailSheet({ sef, onClose, availableBudget }: { sef: Sef; onClose: 
           <div style={{ overflowY: 'auto', padding: '16px 20px calc(32px + var(--safe-bottom))' }}>
             <p style={{ fontSize: 17, fontWeight: 500, color: 'var(--text-1)', marginBottom: 4 }}>{sef.name}</p>
             <p className="num" style={{
-              fontSize: 32, fontWeight: 500, marginBottom: 20,
+              fontSize: 32, fontWeight: 500, marginBottom: sef.target_amount ? 12 : 20,
               color: sef.balance > 0 ? 'var(--accent)' : sef.balance < 0 ? 'var(--red)' : 'var(--text-3)',
             }}>
               {sef.items.length > 0 ? fmt(sef.balance) : '—'}
               {sef.items.length > 0 && <span style={{ fontSize: 15, fontWeight: 400, marginLeft: 6, opacity: 0.6 }}>RSD</span>}
             </p>
 
-            <div style={{ display: 'flex', gap: 10, marginBottom: 24 }}>
+            {sef.target_amount && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Cilj: {fmt(sef.target_amount)} RSD</span>
+                  <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--accent)' }}>{progressPct(sef.balance, sef.target_amount)}%</span>
+                </div>
+                <div style={{ height: 6, borderRadius: 3, background: 'var(--bg-subtle)', overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', borderRadius: 3, background: 'var(--accent)',
+                    width: `${progressPct(sef.balance, sef.target_amount)}%`,
+                    transition: 'width 0.4s ease',
+                  }} />
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
               <button
                 onClick={() => setView('uplata')}
                 style={{
@@ -280,6 +387,17 @@ function SefDetailSheet({ sef, onClose, availableBudget }: { sef: Sef; onClose: 
                 Isplata
               </button>
             </div>
+
+            <button
+              onClick={() => { setGoalAmount(sef.target_amount ? String(sef.target_amount) : ''); setView('goal') }}
+              style={{
+                width: '100%', padding: '11px', borderRadius: 12, fontSize: 13,
+                border: '1.5px solid var(--border)', background: 'transparent',
+                color: 'var(--text-3)', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 24,
+              }}
+            >
+              {sef.target_amount ? 'Uredi cilj' : 'Postavi cilj štednje'}
+            </button>
 
             {sef.items.length === 0 ? (
               <p style={{ fontSize: 14, color: 'var(--text-3)', textAlign: 'center', padding: '12px 0' }}>
@@ -349,27 +467,37 @@ export default function StednjaClient({ sefovi, availableBudget }: { sefovi: Sef
               tapLabel="Otvori"
               actions={[{ label: 'Obriši', color: 'danger', onClick: () => setConfirmDelete(sef) }]}
             >
-              <div style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--bg-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <svg width="15" height="15" viewBox="0 0 40 38" fill="var(--text-3)">
-                    <path d="M7.5,38c-.7,0-1.36-.23-1.97-.7-.62-.47-1.02-1.03-1.23-1.7-.83-2.87-1.53-5.34-2.08-7.42-.55-2.08-.99-3.91-1.32-5.48-.33-1.57-.56-2.97-.7-4.19-.14-1.22-.21-2.39-.21-3.5,0-3.07,1.07-5.67,3.2-7.8,2.13-2.13,4.73-3.2,7.8-3.2h10c.9-1.2,2.04-2.17,3.42-2.9,1.38-.73,2.91-1.1,4.58-1.1.83,0,1.54.29,2.12.88s.88,1.29.88,2.12c0,.2-.03.4-.08.6s-.11.38-.17.55c-.13.37-.26.73-.38,1.1-.12.37-.21.77-.28,1.2l4.55,4.55h2.85c.42,0,.78.14,1.07.43.29.29.43.64.43,1.07v11.35c0,.34-.09.64-.28.91-.18.26-.44.44-.78.54l-4.6,1.51-2.7,9.03c-.2.65-.56,1.18-1.09,1.57-.53.39-1.13.58-1.81.58h-5.75c-.83,0-1.53-.29-2.12-.88-.59-.59-.88-1.29-.88-2.12v-1h-4v1c0,.83-.29,1.53-.88,2.12-.59.59-1.29.88-2.12.88h-5.5ZM7.25,35h5.75v-4h10v4h5.75l3.15-10.5,5.1-1.75v-8.75h-2.6l-6.4-6.4c.03-.57.12-1.26.28-2.07.15-.82.36-1.72.62-2.72-1.43.37-2.7.92-3.8,1.65-1.1.73-1.9,1.58-2.4,2.55h-11.7c-2.21,0-4.1.78-5.66,2.34-1.56,1.56-2.34,3.45-2.34,5.66,0,1.4.37,3.84,1.1,7.33.73,3.48,1.78,7.71,3.15,12.67ZM28,18c.57,0,1.04-.19,1.42-.58s.58-.86.58-1.42-.19-1.04-.58-1.42-.86-.58-1.42-.58-1.04.19-1.42.58-.58.86-.58,1.42.19,1.04.58,1.42.86.58,1.42.58ZM20.5,13c.42,0,.78-.14,1.07-.43.29-.29.43-.65.43-1.07s-.14-.78-.43-1.07c-.29-.28-.64-.43-1.07-.43h-7c-.42,0-.78.14-1.07.43-.29.29-.43.65-.43,1.07s.14.78.43,1.07c.29.28.64.42,1.07.42h7Z" />
-                  </svg>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-1)', marginBottom: 4 }}>{sef.name}</p>
-                  <p style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                    {sef.items.length === 0
-                      ? 'Prazan'
-                      : `${sef.items.length} ${sef.items.length === 1 ? 'stavka' : sef.items.length < 5 ? 'stavke' : 'stavki'}`}
+              <div style={{ padding: '16px 20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--bg-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <svg width="15" height="15" viewBox="0 0 40 38" fill="var(--text-3)">
+                      <path d="M7.5,38c-.7,0-1.36-.23-1.97-.7-.62-.47-1.02-1.03-1.23-1.7-.83-2.87-1.53-5.34-2.08-7.42-.55-2.08-.99-3.91-1.32-5.48-.33-1.57-.56-2.97-.7-4.19-.14-1.22-.21-2.39-.21-3.5,0-3.07,1.07-5.67,3.2-7.8,2.13-2.13,4.73-3.2,7.8-3.2h10c.9-1.2,2.04-2.17,3.42-2.9,1.38-.73,2.91-1.1,4.58-1.1.83,0,1.54.29,2.12.88s.88,1.29.88,2.12c0,.2-.03.4-.08.6s-.11.38-.17.55c-.13.37-.26.73-.38,1.1-.12.37-.21.77-.28,1.2l4.55,4.55h2.85c.42,0,.78.14,1.07.43.29.29.43.64.43,1.07v11.35c0,.34-.09.64-.28.91-.18.26-.44.44-.78.54l-4.6,1.51-2.7,9.03c-.2.65-.56,1.18-1.09,1.57-.53.39-1.13.58-1.81.58h-5.75c-.83,0-1.53-.29-2.12-.88-.59-.59-.88-1.29-.88-2.12v-1h-4v1c0,.83-.29,1.53-.88,2.12-.59.59-1.29.88-2.12.88h-5.5ZM7.25,35h5.75v-4h10v4h5.75l3.15-10.5,5.1-1.75v-8.75h-2.6l-6.4-6.4c.03-.57.12-1.26.28-2.07.15-.82.36-1.72.62-2.72-1.43.37-2.7.92-3.8,1.65-1.1.73-1.9,1.58-2.4,2.55h-11.7c-2.21,0-4.1.78-5.66,2.34-1.56,1.56-2.34,3.45-2.34,5.66,0,1.4.37,3.84,1.1,7.33.73,3.48,1.78,7.71,3.15,12.67ZM28,18c.57,0,1.04-.19,1.42-.58s.58-.86.58-1.42-.19-1.04-.58-1.42-.86-.58-1.42-.58-1.04.19-1.42.58-.58.86-.58,1.42.19,1.04.58,1.42.86.58,1.42.58ZM20.5,13c.42,0,.78-.14,1.07-.43.29-.29.43-.65.43-1.07s-.14-.78-.43-1.07c-.29-.28-.64-.43-1.07-.43h-7c-.42,0-.78.14-1.07.43-.29.29-.43.65-.43,1.07s.14.78.43,1.07c.29.28.64.42,1.07.42h7Z" />
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-1)', marginBottom: 2 }}>{sef.name}</p>
+                    <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: sef.target_amount ? 6 : 0 }}>
+                      {sef.items.length === 0
+                        ? 'Prazan'
+                        : `${sef.items.length} ${sef.items.length === 1 ? 'stavka' : sef.items.length < 5 ? 'stavke' : 'stavki'}`}
+                    </p>
+                    {sef.target_amount && (
+                      <div style={{ height: 3, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%', borderRadius: 2, background: 'var(--accent)',
+                          width: `${progressPct(sef.balance, sef.target_amount)}%`,
+                        }} />
+                      </div>
+                    )}
+                  </div>
+                  <p className="num" style={{
+                    fontSize: 18, fontWeight: 500, flexShrink: 0,
+                    color: sef.balance > 0 ? 'var(--accent)' : sef.balance < 0 ? 'var(--red)' : 'var(--text-3)',
+                  }}>
+                    {sef.items.length > 0 ? fmt(sef.balance) : '—'}
+                    {sef.items.length > 0 && <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 3, opacity: 0.6 }}>RSD</span>}
                   </p>
                 </div>
-                <p className="num" style={{
-                  fontSize: 18, fontWeight: 500,
-                  color: sef.balance > 0 ? 'var(--accent)' : sef.balance < 0 ? 'var(--red)' : 'var(--text-3)',
-                }}>
-                  {sef.items.length > 0 ? fmt(sef.balance) : '—'}
-                  {sef.items.length > 0 && <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 3, opacity: 0.6 }}>RSD</span>}
-                </p>
               </div>
             </SwipeActions>
           ))}

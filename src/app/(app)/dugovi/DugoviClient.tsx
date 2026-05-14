@@ -292,8 +292,17 @@ function AddDebtModal({ buckets, onClose }: { buckets: { id: string; name: strin
   const [loading, setLoading] = useState(false)
   const [errMsg, setErrMsg] = useState('')
   const [view, setView] = useState<'form' | 'calendar'>('form')
+  const [currentMember, setCurrentMember] = useState<{ id: string } | null>(null)
   const supabase = createClient()
   const router = useRouter()
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      supabase.from('members').select('id').eq('user_id', user.id).single()
+        .then(({ data }) => { if (data) setCurrentMember(data) })
+    })
+  }, [])
 
   async function handleSave() {
     const a = parseAmount(amount)
@@ -308,6 +317,7 @@ function AddDebtModal({ buckets, onClose }: { buckets: { id: string; name: strin
     if (error) { setErrMsg(error.message); return }
     const fmtN = (n: number) => new Intl.NumberFormat('sr-Latn-RS').format(Math.round(n))
     notifyHousehold({
+      triggeredByMemberId: currentMember?.id,
       type: 'dug_dodat',
       title: 'Nova pozajmica',
       body: `${direction === 'dugujemo' ? 'Dugujemo' : 'Duguju nam'}: ${name.trim()} · ${fmtN(a)} ${currency}`,
