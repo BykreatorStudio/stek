@@ -76,6 +76,8 @@ export default async function DashboardPage() {
 
   const transactions = txs ?? []
   const recurring = recurringRaw ?? []
+  const recurringExpense = recurring.filter((r: any) => !r.is_income)
+  const recurringIncome = recurring.filter((r: any) => r.is_income)
   const checksThisMonth = checksThisMonthRaw ?? []
   const checksUpcoming = checksUpcomingRaw ?? []
   const credits = creditsRaw ?? []
@@ -117,17 +119,21 @@ export default async function DashboardPage() {
   )
 
   // --- Monthly obligations (identical to troškovi) ---
-  const paidRecurringIds = new Set(transactions.filter((t: any) => t.recurring_item_id).map((t: any) => t.recurring_item_id))
+  const paidRecurringExpenseIds = new Set(transactions.filter((t: any) => t.recurring_item_id && t.type === 'rashod').map((t: any) => t.recurring_item_id))
+  const paidRecurringIncomeIds = new Set(transactions.filter((t: any) => t.recurring_item_id && t.type === 'prihod').map((t: any) => t.recurring_item_id))
   const paidCreditIds = new Set(creditPays.map((p: any) => p.credit_id))
-  const paidRecurringCount = recurring.filter((r: any) => paidRecurringIds.has(r.id)).length
+  const paidRecurringCount = recurringExpense.filter((r: any) => paidRecurringExpenseIds.has(r.id)).length
   const paidCreditCount = credits.filter((c: any) => paidCreditIds.has(c.id)).length
   const paidChecksThisMonth = checksThisMonth.filter((c: any) => c.status === 'isplacen').length
   const paidCount = paidRecurringCount + paidCreditCount + paidChecksThisMonth + settledDebtsThisMonth.length
-  const totalObligations = recurring.length + credits.length + checksThisMonth.length + activeDebts.length + settledDebtsThisMonth.length
+  const totalObligations = recurringExpense.length + credits.length + checksThisMonth.length + activeDebts.length + settledDebtsThisMonth.length
   const allPaid = totalObligations > 0 && paidCount === totalObligations
 
   // Fixed monthly totals
-  const fixedTotal = recurring.filter((r: any) => r.type === 'fiksni').reduce((s: number, r: any) => s + (r.amount ?? 0), 0)
+  const fixedTotal = recurringExpense.filter((r: any) => r.type === 'fiksni').reduce((s: number, r: any) => s + (r.amount ?? 0), 0)
+
+  // Income tracking
+  const receivedIncomeCount = recurringIncome.filter((r: any) => paidRecurringIncomeIds.has(r.id)).length
   const creditTotal = credits.reduce((s: number, c: any) => s + c.monthly_payment, 0)
 
   // --- Financial picture (only active debts) ---
@@ -151,8 +157,8 @@ export default async function DashboardPage() {
   type UpcomingItem = { name: string; amount: number; currency: string; dueDate: Date; label: string; overdue: boolean }
   const upcomingItems: UpcomingItem[] = []
 
-  for (const r of recurring) {
-    if (paidRecurringIds.has(r.id)) continue
+  for (const r of recurringExpense) {
+    if (paidRecurringExpenseIds.has(r.id)) continue
     const dueDate = getEffectiveDueDate(r.due_day, today)
     if (dueDate <= in15) {
       const diff = Math.round((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
@@ -256,41 +262,71 @@ export default async function DashboardPage() {
       <div style={{ maxWidth: 520, margin: '0 auto', padding: '20px 16px' }}>
 
         {/* --- Ovaj mesec --- */}
-        {totalObligations > 0 && (
+        {(totalObligations > 0 || recurringIncome.length > 0) && (
           <>
             <p className="section-label">Ovaj mesec</p>
-            <Link href="/troskovi" style={{ textDecoration: 'none', display: 'block', marginBottom: 16 }}>
-              <div className="card" style={{ padding: '16px 20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                  <div>
-                    <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>Mesečne obaveze</p>
-                    <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
-                      {paidCount} od {totalObligations} izmireno
-                      {fixedTotal + creditTotal > 0 ? ` · ${fmt(fixedTotal + creditTotal)} RSD` : ''}
-                    </p>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{
-                      fontSize: 11, fontWeight: 500, padding: '3px 10px', borderRadius: 20,
-                      background: allPaid ? 'var(--accent-light)' : 'rgba(248,113,113,0.12)',
-                      color: allPaid ? 'var(--accent-dark)' : 'var(--red)',
-                    }}>
-                      {allPaid ? 'Sve izmireno' : `${totalObligations - paidCount} preostalo`}
-                    </span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="9 18 15 12 9 6" />
-                    </svg>
+
+            {recurringIncome.length > 0 && (
+              <Link href="/mesecni-racuni" style={{ textDecoration: 'none', display: 'block', marginBottom: 8 }}>
+                <div className="card" style={{ padding: '16px 20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>Stalni prihodi</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+                        {receivedIncomeCount} od {recurringIncome.length} primljeno
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{
+                        fontSize: 11, fontWeight: 500, padding: '3px 10px', borderRadius: 20,
+                        background: receivedIncomeCount === recurringIncome.length ? 'var(--accent-light)' : 'rgba(248,113,113,0.12)',
+                        color: receivedIncomeCount === recurringIncome.length ? 'var(--accent-dark)' : 'var(--red)',
+                      }}>
+                        {receivedIncomeCount === recurringIncome.length ? 'Sve primljeno' : `${recurringIncome.length - receivedIncomeCount} čeka`}
+                      </span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="9 18 15 12 9 6" />
+                      </svg>
+                    </div>
                   </div>
                 </div>
-                <div style={{ height: 4, borderRadius: 4, background: 'var(--border-2)' }}>
-                  <div style={{
-                    height: '100%', borderRadius: 4, background: 'var(--accent)',
-                    width: totalObligations > 0 ? `${(paidCount / totalObligations) * 100}%` : '0%',
-                    transition: 'width 0.3s ease',
-                  }} />
+              </Link>
+            )}
+
+            {totalObligations > 0 && (
+              <Link href="/troskovi" style={{ textDecoration: 'none', display: 'block', marginBottom: 16 }}>
+                <div className="card" style={{ padding: '16px 20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <div>
+                      <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>Mesečne obaveze</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+                        {paidCount} od {totalObligations} izmireno
+                        {fixedTotal + creditTotal > 0 ? ` · ${fmt(fixedTotal + creditTotal)} RSD` : ''}
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{
+                        fontSize: 11, fontWeight: 500, padding: '3px 10px', borderRadius: 20,
+                        background: allPaid ? 'var(--accent-light)' : 'rgba(248,113,113,0.12)',
+                        color: allPaid ? 'var(--accent-dark)' : 'var(--red)',
+                      }}>
+                        {allPaid ? 'Sve izmireno' : `${totalObligations - paidCount} preostalo`}
+                      </span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="9 18 15 12 9 6" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div style={{ height: 4, borderRadius: 4, background: 'var(--border-2)' }}>
+                    <div style={{
+                      height: '100%', borderRadius: 4, background: 'var(--accent)',
+                      width: totalObligations > 0 ? `${(paidCount / totalObligations) * 100}%` : '0%',
+                      transition: 'width 0.3s ease',
+                    }} />
+                  </div>
                 </div>
-              </div>
-            </Link>
+              </Link>
+            )}
           </>
         )}
 

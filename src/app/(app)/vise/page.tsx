@@ -44,7 +44,7 @@ const ITEMS = [
   },
   {
     href: '/mesecni-racuni',
-    label: 'Mesečni računi',
+    label: 'Računi i plate',
     icon: (
       <svg width={S} height={S} viewBox="0 0 39.56 39.77" {...stroke}>
         <path d="M7.02,38.27h27.36c2.03,0,3.68-1.65,3.68-3.68V10.69L28.86,1.5H10.69c-2.03,0-3.68,1.65-3.68,3.68v7.35" />

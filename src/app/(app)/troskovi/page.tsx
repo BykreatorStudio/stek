@@ -44,7 +44,7 @@ export default async function TroskoviPage({ searchParams }: { searchParams: Pro
     { data: nbsRateRaw },
   ] = await Promise.all([
     supabase.from('transactions').select('id, recurring_item_id, amount').eq('month', month).not('recurring_item_id', 'is', null),
-    supabase.from('recurring_items').select('id, name, amount, currency, due_day, type, bucket_id, category_id').eq('is_active', true).order('due_day'),
+    supabase.from('recurring_items').select('id, name, amount, currency, due_day, type, bucket_id, category_id').eq('is_active', true).eq('is_income', false).order('due_day'),
     supabase.from('credits').select('id, name, monthly_payment, due_day, bucket_id, currency, original_amount, remaining_amount').eq('status', 'aktivan').order('due_day'),
     supabase.from('credit_payments').select('id, credit_id').gte('date', monthStart).lte('date', monthEnd),
     supabase.from('cekovi').select('id, quantity, date, status, note').gte('date', monthStart).lte('date', monthEnd).order('date'),

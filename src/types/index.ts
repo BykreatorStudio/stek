@@ -38,13 +38,14 @@ export interface Category {
 
 export interface RecurringItem {
   id: string
-  bucket_id: string
-  category_id: string
+  bucket_id: string | null
+  category_id: string | null
   name: string
   type: RecurringType
   amount: number | null
   currency: Currency
   due_day: number
+  is_income: boolean
   notify_7_days: boolean
   notify_3_days: boolean
   notify_on_day: boolean
