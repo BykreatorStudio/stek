@@ -50,15 +50,14 @@ export default function TransakcijaForm({ onClose }: { onClose: () => void }) {
   }, [])
 
   useEffect(() => {
-    if (!bucketId) return
     supabase.from('categories').select('*')
-      .eq('bucket_id', bucketId).eq('type', type).eq('is_active', true).order('name')
+      .eq('type', type).eq('is_active', true).order('name')
       .then(({ data }) => {
         setCategories(data ?? [])
         if (data?.[0]) { setCategoryId(data[0].id); setCurrency(data[0].currency_default) }
         else setCategoryId('')
       })
-  }, [bucketId, type])
+  }, [type])
 
   async function handleSubmit() {
     if (!amount || !name.trim()) return

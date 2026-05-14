@@ -27,7 +27,7 @@ export interface Bucket {
 
 export interface Category {
   id: string
-  bucket_id: string
+  bucket_id: string | null
   name: string
   type: TransactionType
   currency_default: Currency

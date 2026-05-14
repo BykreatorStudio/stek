@@ -5,11 +5,9 @@ import KategorijeClient from './KategorijeClient'
 export default async function KategorijePage() {
   const supabase = await createClient()
 
-  const { data: bucketsRaw } = await supabase.from('buckets').select('*').order('name')
-  const buckets = bucketsRaw ?? []
   const { data: categories } = await supabase
     .from('categories')
-    .select('*, bucket:buckets(name)')
+    .select('*')
     .eq('is_active', true)
     .order('name')
 
@@ -26,7 +24,7 @@ export default async function KategorijePage() {
         </div>
       </div>
 
-      <KategorijeClient buckets={buckets ?? []} categories={categories ?? []} />
+      <KategorijeClient categories={categories ?? []} />
     </div>
   )
 }

@@ -57,7 +57,6 @@ export default function MesecniRacuniClient({
   const supabase = createClient()
   const router = useRouter()
 
-  const filteredCats = categories.filter(c => c.bucket_id === bucketId)
   const incomeItems = items.filter(i => i.is_income)
   const expenseItems = items.filter(i => !i.is_income)
   const grouped = buckets
@@ -70,7 +69,7 @@ export default function MesecniRacuniClient({
     setName('')
     setType('fiksni')
     setBucketId(buckets[0]?.id ?? '')
-    setCategoryId(categories.find(c => c.bucket_id === buckets[0]?.id)?.id ?? '')
+    setCategoryId(categories[0]?.id ?? '')
     setAmount('')
     setCurrency('RSD')
     setDueDay('1')
@@ -95,11 +94,6 @@ export default function MesecniRacuniClient({
     setReceiveAmount(item.amount ? formatAmount(String(item.amount).replace('.', ',')) : '')
     setReceiveCurrency(item.currency)
     setReceiveMemberId(members[0]?.id ?? '')
-  }
-
-  function handleBucketChange(id: string) {
-    setBucketId(id)
-    setCategoryId(categories.find(c => c.bucket_id === id)?.id ?? '')
   }
 
   async function handleSave() {
@@ -443,20 +437,20 @@ export default function MesecniRacuniClient({
               <>
                 <Select
                   value={bucketId}
-                  onChange={handleBucketChange}
+                  onChange={setBucketId}
                   options={buckets.map(b => ({ label: b.name, value: b.id }))}
                   style={{ marginBottom: 10 }}
                 />
-                {filteredCats.length > 0 ? (
+                {categories.length > 0 ? (
                   <Select
                     value={categoryId}
                     onChange={setCategoryId}
-                    options={filteredCats.map(c => ({ label: c.name, value: c.id }))}
+                    options={categories.map(c => ({ label: c.name, value: c.id }))}
                     style={{ marginBottom: 10 }}
                   />
                 ) : (
                   <p style={{ fontSize: 13, color: 'var(--text-3)', padding: '12px 0', marginBottom: 10 }}>
-                    Nema kategorija za ovu kasu
+                    Nema kategorija
                   </p>
                 )}
               </>

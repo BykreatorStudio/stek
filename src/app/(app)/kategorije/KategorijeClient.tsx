@@ -3,15 +3,14 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import type { Bucket, Category } from '@/types'
-import Select from '@/components/ui/Select'
-export default function KategorijeClient({ buckets, categories }: { buckets: Bucket[], categories: Category[] }) {
+import type { Category } from '@/types'
+
+export default function KategorijeClient({ categories }: { categories: Category[] }) {
   const [showForm, setShowForm] = useState(false)
   const [editingCat, setEditingCat] = useState<Category | null>(null)
   const [catName, setCatName] = useState('')
   const [catType, setCatType] = useState<'prihod' | 'rashod'>('rashod')
   const [catCurrency, setCatCurrency] = useState<'RSD' | 'EUR'>('RSD')
-  const [catBucketId, setCatBucketId] = useState(buckets[0]?.id ?? '')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [confirmDeleteAllId, setConfirmDeleteAllId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -25,12 +24,12 @@ export default function KategorijeClient({ buckets, categories }: { buckets: Buc
 
   function openAdd() {
     setEditingCat(null)
-    setCatName(''); setCatType('rashod'); setCatCurrency('RSD'); setCatBucketId(buckets[0]?.id ?? '')
+    setCatName(''); setCatType('rashod'); setCatCurrency('RSD')
     setShowForm(true)
   }
   function openEdit(cat: Category) {
     setEditingCat(cat)
-    setCatName(cat.name); setCatType(cat.type); setCatCurrency(cat.currency_default); setCatBucketId(cat.bucket_id)
+    setCatName(cat.name); setCatType(cat.type); setCatCurrency(cat.currency_default)
     setShowForm(true)
   }
   function closeForm() {
@@ -38,12 +37,12 @@ export default function KategorijeClient({ buckets, categories }: { buckets: Buc
   }
 
   async function handleSave() {
-    if (!catName.trim() || !catBucketId) return
+    if (!catName.trim()) return
     setLoading(true)
     if (editingCat) {
-      await supabase.from('categories').update({ name: catName.trim(), type: catType, currency_default: catCurrency, bucket_id: catBucketId }).eq('id', editingCat.id)
+      await supabase.from('categories').update({ name: catName.trim(), type: catType, currency_default: catCurrency }).eq('id', editingCat.id)
     } else {
-      await supabase.from('categories').insert({ bucket_id: catBucketId, name: catName.trim(), type: catType, currency_default: catCurrency })
+      await supabase.from('categories').insert({ name: catName.trim(), type: catType, currency_default: catCurrency })
     }
     setLoading(false); closeForm(); router.refresh()
   }
@@ -65,10 +64,6 @@ export default function KategorijeClient({ buckets, categories }: { buckets: Buc
     setConfirmDeleteAllId(null)
     setConfirmDeleteId(null)
     router.refresh()
-  }
-
-  function bucketName(id: string) {
-    return buckets.find(b => b.id === id)?.name ?? ''
   }
 
   return (
@@ -99,7 +94,7 @@ export default function KategorijeClient({ buckets, categories }: { buckets: Buc
                     </div>
                     <div style={{ flex: 1 }}>
                       <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', marginBottom: 2 }}>{cat.name}</p>
-                      <p style={{ fontSize: 11, color: 'var(--text-3)' }}>{bucketName(cat.bucket_id)} · {cat.currency_default}</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-3)' }}>{cat.currency_default}</p>
                     </div>
                     <div style={{ display: 'flex', gap: 20 }}>
                       <button onClick={() => openEdit(cat)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--accent)' }}>
@@ -117,7 +112,6 @@ export default function KategorijeClient({ buckets, categories }: { buckets: Buc
         ))}
       </div>
 
-      {/* FAB */}
       <button onClick={openAdd} style={{
         position: 'fixed', bottom: 'calc(var(--nav-height) + var(--safe-bottom) + 16px)', right: 20,
         width: 52, height: 52, borderRadius: 16,
@@ -131,7 +125,6 @@ export default function KategorijeClient({ buckets, categories }: { buckets: Buc
         </svg>
       </button>
 
-      {/* Delete — choose mode */}
       {confirmDeleteId && !confirmDeleteAllId && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)', padding: '0 24px' }}
           onClick={() => setConfirmDeleteId(null)}>
@@ -155,7 +148,6 @@ export default function KategorijeClient({ buckets, categories }: { buckets: Buc
         </div>
       )}
 
-      {/* Delete all — second confirm */}
       {confirmDeleteAllId && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 310, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)', padding: '0 24px' }}
           onClick={() => setConfirmDeleteAllId(null)}>
@@ -172,7 +164,6 @@ export default function KategorijeClient({ buckets, categories }: { buckets: Buc
         </div>
       )}
 
-      {/* Category form sheet */}
       {showForm && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(6px)' }}
           onClick={closeForm}>
@@ -185,6 +176,7 @@ export default function KategorijeClient({ buckets, categories }: { buckets: Buc
               {editingCat ? 'Izmeni kategoriju' : 'Nova kategorija'}
             </p>
             <input value={catName} onChange={e => setCatName(e.target.value)} placeholder="Naziv kategorije"
+              onKeyDown={e => { if (e.key === 'Enter') handleSave() }}
               style={{ width: '100%', padding: '13px 16px', fontSize: 14, color: 'var(--text-1)', border: '1.5px solid var(--border)', borderRadius: 12, background: 'var(--card)', outline: 'none', fontFamily: 'inherit', marginBottom: 10 }} />
             <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
               {([
@@ -200,18 +192,12 @@ export default function KategorijeClient({ buckets, categories }: { buckets: Buc
                 )
               })}
             </div>
-            <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 10 }}>
+            <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 20 }}>
               {(['RSD', 'EUR'] as const).map(c => (
                 <button key={c} onClick={() => setCatCurrency(c)} style={{ padding: '5px 18px', borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: 'pointer', border: '1.5px solid', borderColor: catCurrency === c ? 'var(--text-1)' : 'var(--border)', background: catCurrency === c ? 'var(--text-1)' : 'transparent', color: catCurrency === c ? '#fff' : 'var(--text-3)' }}>{c}</button>
               ))}
             </div>
-            <Select
-              value={catBucketId}
-              onChange={v => setCatBucketId(v)}
-              options={buckets.map(b => ({ label: b.name, value: b.id }))}
-              style={{ marginBottom: 20 }}
-            />
-            <button onClick={handleSave} disabled={loading || !catName.trim() || !catBucketId} className="btn-primary">
+            <button onClick={handleSave} disabled={loading || !catName.trim()} className="btn-primary">
               {loading ? 'Čuvanje...' : 'Sačuvaj'}
             </button>
           </div>
