@@ -1,18 +1,51 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { AuthLogoSection } from '@/components/ui/AuthLogo'
+import { Suspense } from 'react'
 
-export default function ResetPasswordPage() {
+function ResetPasswordInner() {
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [loading, setLoading] = useState(false)
+  const [exchanging, setExchanging] = useState(true)
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
+
+  useEffect(() => {
+    const code = searchParams.get('code')
+
+    if (code) {
+      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+        if (error) {
+          setError('Link za reset lozinke je istekao ili je već iskorišćen. Zatražite novi.')
+        }
+        setExchanging(false)
+      })
+    } else {
+      // No code — check if already in PASSWORD_RECOVERY state (hash-based flow)
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!session) {
+          setError('Link nije validan. Zatražite novi link za reset lozinke.')
+        }
+        setExchanging(false)
+      })
+    }
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setExchanging(false)
+        setError('')
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
 
   const match = password.length >= 6 && password === confirm
 
@@ -46,6 +79,20 @@ export default function ResetPasswordPage() {
           <>
             <p style={{ fontSize: 17, fontWeight: 500, color: '#100F0D', marginBottom: 8 }}>Lozinka promenjena</p>
             <p style={{ fontSize: 14, color: 'var(--text-3)' }}>Bićete preusmereni na početnu...</p>
+          </>
+        ) : exchanging ? (
+          <p style={{ fontSize: 14, color: 'var(--text-3)' }}>Proveravamo link...</p>
+        ) : error && !password ? (
+          <>
+            <p style={{ fontSize: 17, fontWeight: 500, color: '#100F0D', marginBottom: 8 }}>Link nije validan</p>
+            <p style={{ fontSize: 14, color: 'var(--text-3)', marginBottom: 20 }}>{error}</p>
+            <button
+              onClick={() => router.push('/forgot-password')}
+              className="btn-primary"
+              style={{ width: '100%' }}
+            >
+              Zatraži novi link
+            </button>
           </>
         ) : (
           <>
@@ -82,5 +129,13 @@ export default function ResetPasswordPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense>
+      <ResetPasswordInner />
+    </Suspense>
   )
 }

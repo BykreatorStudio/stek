@@ -16,10 +16,18 @@ export default function ForgotPasswordPage() {
     setLoading(true); setError('')
     const supabase = createClient()
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+      redirectTo: `${window.location.origin}/reset-password`,
     })
     setLoading(false)
-    if (error) { setError('Greška pri slanju. Proveri email adresu.'); return }
+    if (error) {
+      const msg = error.message?.toLowerCase() ?? ''
+      if (msg.includes('rate') || msg.includes('after')) {
+        setError('Već smo ti poslali link. Sačekaj nekoliko minuta pa pokušaj ponovo.')
+      } else {
+        setError('Greška pri slanju. Pokušaj ponovo.')
+      }
+      return
+    }
     setSent(true)
   }
 
