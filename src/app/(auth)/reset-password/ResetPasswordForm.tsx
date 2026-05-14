@@ -19,6 +19,7 @@ export default function ResetPasswordForm() {
     setLoading(true); setError('')
     const { error } = await supabase.auth.updateUser({ password })
     if (error) { setError(error.message); setLoading(false); return }
+    document.cookie = 'recovery-pending=; max-age=0; path=/'
     setDone(true)
     setTimeout(() => { window.location.href = '/dashboard' }, 2000)
   }

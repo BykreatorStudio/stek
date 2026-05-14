@@ -25,8 +25,16 @@ export async function updateSession(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  const isPublicRoute = ['/login', '/register', '/forgot-password', '/reset-password', '/auth/'].some(p => request.nextUrl.pathname.startsWith(p))
-  const isApiRoute = request.nextUrl.pathname.startsWith('/api')
+  const path = request.nextUrl.pathname
+  const isPublicRoute = ['/login', '/register', '/forgot-password', '/reset-password', '/auth/'].some(p => path.startsWith(p))
+  const isApiRoute = path.startsWith('/api')
+  const recoveryPending = request.cookies.get('recovery-pending')?.value === '1'
+
+  if (user && recoveryPending && !path.startsWith('/reset-password')) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/reset-password'
+    return NextResponse.redirect(url)
+  }
 
   if (!user && !isPublicRoute && !isApiRoute) {
     const url = request.nextUrl.clone()
@@ -34,7 +42,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  if (user && ['/login', '/register'].some(p => request.nextUrl.pathname.startsWith(p))) {
+  if (user && ['/login', '/register'].some(p => path.startsWith(p))) {
     const url = request.nextUrl.clone()
     url.pathname = '/'
     return NextResponse.redirect(url)

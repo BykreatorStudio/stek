@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
   const token_hash = searchParams.get('token_hash')
   const type = searchParams.get('type')
   const next = searchParams.get('next') ?? '/dashboard'
+  const isRecovery = next === '/reset-password'
 
   const response = NextResponse.redirect(`${origin}/login`)
 
@@ -24,6 +25,7 @@ export async function GET(request: NextRequest) {
   if (token_hash && type) {
     const { error } = await supabase.auth.verifyOtp({ token_hash, type: type as any })
     if (!error) {
+      if (isRecovery) response.cookies.set('recovery-pending', '1', { httpOnly: false, sameSite: 'lax', path: '/' })
       response.headers.set('location', `${origin}${next}`)
       return response
     }
@@ -32,6 +34,7 @@ export async function GET(request: NextRequest) {
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
+      if (isRecovery) response.cookies.set('recovery-pending', '1', { httpOnly: false, sameSite: 'lax', path: '/' })
       response.headers.set('location', `${origin}${next}`)
       return response
     }
