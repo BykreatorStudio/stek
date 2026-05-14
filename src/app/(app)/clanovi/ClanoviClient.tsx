@@ -289,7 +289,6 @@ export default function ClanoviClient({ members, currentUserId, currentUserRole 
   const isOwner = currentUserRole === 'owner'
 
   async function handleRemoveMember(member: Member) {
-    if (!member.user_id) return
     const res = await fetch('/api/admin/remove-member', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

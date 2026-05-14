@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { memberId, userId } = await request.json()
-  if (!memberId || !userId) return NextResponse.json({ error: 'Missing params' }, { status: 400 })
+  if (!memberId) return NextResponse.json({ error: 'Missing params' }, { status: 400 })
 
   const { data: hm } = await supabase.from('household_members').select('role').eq('user_id', user.id).single()
   if (hm?.role !== 'owner') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -24,10 +24,12 @@ export async function POST(request: Request) {
   const supabaseAdmin = admin()
 
   await supabaseAdmin.from('members').update({ user_id: null }).eq('id', memberId)
-  await supabaseAdmin.from('household_members').delete().eq('user_id', userId)
 
-  const { error } = await supabaseAdmin.auth.admin.deleteUser(userId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (userId) {
+    await supabaseAdmin.from('household_members').delete().eq('user_id', userId)
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(userId)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 
   return NextResponse.json({ ok: true })
 }
