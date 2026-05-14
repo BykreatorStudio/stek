@@ -17,6 +17,30 @@ export async function POST() {
 
   const supabaseAdmin = admin()
 
+  const { data: membership } = await supabaseAdmin
+    .from('household_members')
+    .select('household_id, role')
+    .eq('user_id', user.id)
+    .single()
+
+  if (membership?.role === 'owner' && membership.household_id) {
+    const { data: others } = await supabaseAdmin
+      .from('household_members')
+      .select('user_id')
+      .eq('household_id', membership.household_id)
+      .neq('user_id', user.id)
+
+    for (const m of others ?? []) {
+      if (m.user_id) {
+        await supabaseAdmin.from('household_members').delete().eq('user_id', m.user_id)
+        await supabaseAdmin.from('members').update({ user_id: null }).eq('user_id', m.user_id)
+        await supabaseAdmin.auth.admin.deleteUser(m.user_id)
+      }
+    }
+
+    await supabaseAdmin.from('households').delete().eq('id', membership.household_id)
+  }
+
   await supabaseAdmin.from('members').update({ user_id: null }).eq('user_id', user.id)
   await supabaseAdmin.from('household_members').delete().eq('user_id', user.id)
   await supabase.auth.signOut()
