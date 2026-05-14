@@ -58,13 +58,24 @@ const PICKER_OPTIONS = [
     key: 'transakcija' as const,
     label: 'Transakcija',
     desc: 'Prihod ili rashod',
-    icon: 'M12 5v14M19 12l-7 7-7-7',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+        stroke="var(--text-2)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 5v14M19 12l-7 7-7-7" />
+      </svg>
+    ),
   },
   {
     key: 'cek' as const,
     label: 'Ček',
     desc: 'Ček na naplatu · 5.000 RSD',
-    icon: 'M2 7h20v10H2zM7 7v10M10 11h7M10 14h4',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 39.66 38.67" fill="none"
+        stroke="var(--text-2)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M17.56,23.31l-6.05.86.86-6.05L27.93,2.57c.34-.34.74-.61,1.19-.79.44-.18.92-.28,1.4-.28s.96.09,1.4.28c.44.18.85.45,1.19.79.34.34.61.74.79,1.19.18.44.28.92.28,1.4s-.09.96-.28,1.4c-.18.44-.45.85-.79,1.19l-15.55,15.55Z" />
+        <path d="M8.83,15.17H3.94c-.65,0-1.27.26-1.73.72-.46.46-.72,1.08-.72,1.73v17.11c0,.65.26,1.27.72,1.73.46.46,1.08.72,1.73.72h31.77c.65,0,1.27-.26,1.73-.72s.72-1.08.72-1.73v-17.11c0-.65-.26-1.27-.72-1.73-.46-.46-1.08-.72-1.73-.72h-2.44" />
+      </svg>
+    ),
   },
 ]
 
@@ -131,10 +142,7 @@ function Picker({ onSelect, onClose }: { onSelect: (key: 'transakcija' | 'cek') 
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               background: 'var(--bg-subtle)',
             }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-                stroke="var(--text-2)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d={opt.icon} />
-              </svg>
+              {opt.icon}
             </div>
             <div style={{ flex: 1, textAlign: 'left' }}>
               <p style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-1)', marginBottom: 2 }}>{opt.label}</p>
