@@ -53,6 +53,7 @@ export default async function DashboardPage() {
     { data: membersRaw },
     { data: nbsRateRaw },
     { data: recentTxsRaw },
+    { data: savingsThisMonthRaw },
   ] = await Promise.all([
     supabase.from('members').select('name').eq('user_id', user.id).single(),
     supabase.from('transactions').select('*').eq('month', month),
@@ -64,6 +65,7 @@ export default async function DashboardPage() {
     supabase.from('dugovi').select('*'),
     supabase.from('debt_payments').select('debt_id, amount, date'),
     supabase.from('savings').select('amount'),
+    supabase.from('savings').select('amount').gte('date', monthStart).lte('date', monthEnd),
     supabase.from('members').select('*').order('created_at'),
     supabase.from('nbs_rates').select('eur_to_rsd').order('date', { ascending: false }).limit(1).single(),
     supabase.from('transactions').select('id, type, name, amount, currency, date, created_at').order('created_at', { ascending: false }).limit(10),
@@ -84,8 +86,9 @@ export default async function DashboardPage() {
   // --- Month cash flow ---
   const totalPrihodi = transactions.filter((t: any) => t.type === 'prihod').reduce((s: number, t: any) => s + t.amount, 0)
   const totalRashodi = transactions.filter((t: any) => t.type === 'rashod').reduce((s: number, t: any) => s + t.amount, 0)
-  const balance = totalPrihodi - totalRashodi
-  const hasData = transactions.length > 0
+  const neto_savings = (savingsThisMonthRaw ?? []).reduce((s: number, r: any) => s + r.amount, 0)
+  const dostupno = totalPrihodi - totalRashodi - neto_savings
+  const hasData = transactions.length > 0 || neto_savings !== 0
 
   // --- Debts split (mirror troškovi logic exactly) ---
   const allDebtsWithPaid = allDebts.map((d: any) => {
@@ -199,35 +202,36 @@ export default async function DashboardPage() {
           </div>
 
           {/* Hero balance */}
-          <p style={{ fontSize: 12, color: 'var(--header-muted)', marginBottom: 6 }}>Bilans meseca</p>
+          <p style={{ fontSize: 12, color: 'var(--header-muted)', marginBottom: 6 }}>Dostupno ovog meseca</p>
           <p className="num" style={{
             fontSize: 44, fontWeight: 500, lineHeight: 1, marginBottom: 20,
-            color: !hasData ? 'var(--header-text)' : balance >= 0 ? 'var(--accent-on-dark)' : '#f87171',
+            color: !hasData ? 'var(--header-text)' : dostupno >= 0 ? 'var(--accent-on-dark)' : '#f87171',
           }}>
-            {!hasData ? '—' : (balance >= 0 ? '+' : '-') + fmt(balance)}
+            {!hasData ? '—' : (dostupno >= 0 ? '+' : '-') + fmt(dostupno)}
             {hasData && <span style={{ fontSize: 20, color: 'var(--header-muted)', fontWeight: 400, marginLeft: 8 }}>RSD</span>}
           </p>
 
-          {/* Prihodi / Rashodi / Obaveze */}
+          {/* Prihodi / Rashodi / Sefovi */}
           <div style={{ display: 'flex', gap: 10 }}>
             <div style={{ flex: 1, background: 'rgba(255,255,255,0.07)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(255,255,255,0.08)' }}>
               <p style={{ fontSize: 11, color: 'var(--header-muted)', marginBottom: 4 }}>Prihodi</p>
-              <p className="num" style={{ fontSize: 16, fontWeight: 500, color: hasData ? 'var(--accent-on-dark)' : 'var(--header-muted)' }}>
-                {hasData ? fmt(totalPrihodi) : '—'}
-                {hasData && <span style={{ fontSize: 10, fontWeight: 400, marginLeft: 3, opacity: 0.6 }}>RSD</span>}
+              <p className="num" style={{ fontSize: 16, fontWeight: 500, color: totalPrihodi > 0 ? 'var(--accent-on-dark)' : 'var(--header-muted)' }}>
+                {totalPrihodi > 0 ? fmt(totalPrihodi) : '—'}
+                {totalPrihodi > 0 && <span style={{ fontSize: 10, fontWeight: 400, marginLeft: 3, opacity: 0.6 }}>RSD</span>}
               </p>
             </div>
             <div style={{ flex: 1, background: 'rgba(255,255,255,0.07)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(255,255,255,0.08)' }}>
               <p style={{ fontSize: 11, color: 'var(--header-muted)', marginBottom: 4 }}>Rashodi</p>
-              <p className="num" style={{ fontSize: 16, fontWeight: 500, color: hasData ? '#f87171' : 'var(--header-muted)' }}>
-                {hasData ? fmt(totalRashodi) : '—'}
-                {hasData && <span style={{ fontSize: 10, fontWeight: 400, marginLeft: 3, opacity: 0.6 }}>RSD</span>}
+              <p className="num" style={{ fontSize: 16, fontWeight: 500, color: totalRashodi > 0 ? '#f87171' : 'var(--header-muted)' }}>
+                {totalRashodi > 0 ? fmt(totalRashodi) : '—'}
+                {totalRashodi > 0 && <span style={{ fontSize: 10, fontWeight: 400, marginLeft: 3, opacity: 0.6 }}>RSD</span>}
               </p>
             </div>
             <div style={{ flex: 1, background: 'rgba(255,255,255,0.07)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <p style={{ fontSize: 11, color: 'var(--header-muted)', marginBottom: 4 }}>Obaveze</p>
-              <p className="num" style={{ fontSize: 16, fontWeight: 500, color: allPaid ? 'var(--accent-on-dark)' : 'var(--header-text)' }}>
-                {paidCount}/{totalObligations}
+              <p style={{ fontSize: 11, color: 'var(--header-muted)', marginBottom: 4 }}>Sefovi</p>
+              <p className="num" style={{ fontSize: 16, fontWeight: 500, color: neto_savings > 0 ? 'var(--accent-on-dark)' : 'var(--header-muted)' }}>
+                {neto_savings > 0 ? fmt(neto_savings) : '—'}
+                {neto_savings > 0 && <span style={{ fontSize: 10, fontWeight: 400, marginLeft: 3, opacity: 0.6 }}>RSD</span>}
               </p>
             </div>
           </div>
