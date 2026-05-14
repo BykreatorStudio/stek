@@ -1,8 +1,16 @@
 'use client'
 
 import { useState } from 'react'
+import Select from '@/components/ui/Select'
 
 type UpitType = 'Bug prijava' | 'Sugestija' | 'Pitanje' | 'Ostalo'
+
+const UPIT_OPTIONS = [
+  { value: 'Pitanje', label: 'Pitanje' },
+  { value: 'Bug prijava', label: 'Bug prijava' },
+  { value: 'Sugestija', label: 'Sugestija' },
+  { value: 'Ostalo', label: 'Ostalo' },
+]
 
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '12px 14px', fontSize: 14,
@@ -142,16 +150,12 @@ export default function ContactSection() {
                 />
 
                 <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-3)', marginBottom: 6 }}>Vrsta upita</p>
-                <select
+                <Select
                   value={type}
-                  onChange={e => setType(e.target.value as UpitType)}
-                  style={{ ...inputStyle, marginBottom: 14 }}
-                >
-                  <option>Bug prijava</option>
-                  <option>Sugestija</option>
-                  <option>Pitanje</option>
-                  <option>Ostalo</option>
-                </select>
+                  onChange={v => setType(v as UpitType)}
+                  options={UPIT_OPTIONS}
+                  style={{ marginBottom: 14 }}
+                />
 
                 <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-3)', marginBottom: 6 }}>Poruka</p>
                 <textarea
