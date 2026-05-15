@@ -234,12 +234,25 @@ export default async function DashboardPage() {
           {/* Hero balance */}
           <p style={{ fontSize: 12, color: 'var(--header-muted)', marginBottom: 6 }}>Dostupno ovog meseca</p>
           <p className="num" style={{
-            fontSize: 44, fontWeight: 500, lineHeight: 1, marginBottom: 20,
+            fontSize: 44, fontWeight: 500, lineHeight: 1, marginBottom: 8,
             color: !hasData ? 'var(--header-text)' : dostupno >= 0 ? 'var(--accent-on-dark)' : '#f87171',
           }}>
             {!hasData ? '—' : (dostupno >= 0 ? '+' : '-') + fmt(dostupno)}
             {hasData && <span style={{ fontSize: 20, color: 'var(--header-muted)', fontWeight: 400, marginLeft: 8 }}>RSD</span>}
           </p>
+
+          {/* Breakdown */}
+          {hasData && (
+            <p style={{ fontSize: 11, color: 'var(--header-muted)', marginBottom: 18, lineHeight: 1.6 }}>
+              {totalPrihodi > 0 && <span>+{fmt(totalPrihodi)} prihodi</span>}
+              {extraIncome > 0 && <span> · +{fmt(extraIncome)} vraćeno</span>}
+              {totalRashodi > 0 && <span> · -{fmt(totalRashodi)} rashodi</span>}
+              {totalCreditRashodi > 0 && <span> · -{fmt(totalCreditRashodi)} krediti</span>}
+              {totalCekRashodi > 0 && <span> · -{fmt(totalCekRashodi)} čekovi</span>}
+              {totalDugRashodi > 0 && <span> · -{fmt(totalDugRashodi)} dugovi</span>}
+              {neto_savings > 0 && <span> · -{fmt(neto_savings)} štednja</span>}
+            </p>
+          )}
 
           {/* Prihodi / Rashodi / Sefovi */}
           <div style={{ display: 'flex', gap: 10 }}>
