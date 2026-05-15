@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import jsQR from 'jsqr'
 
 type Category = { id: string; name: string }
 type Bucket = { id: string; name: string }
@@ -81,7 +82,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
   const [currentMember, setCurrentMember] = useState<{ id: string } | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
-  const scannerRef = useRef<any>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const supabase = createClient()
   const router = useRouter()
@@ -101,13 +102,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
   }, [])
 
   const handleQrDetected = useCallback(async (qrUrl: string) => {
-    if (scannerRef.current) {
-      scannerRef.current.stop()
-      scannerRef.current.destroy()
-      scannerRef.current = null
-    }
     setView('loading')
-
     try {
       const res = await fetch('/api/scan-receipt', {
         method: 'POST',
@@ -125,9 +120,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
         setView('error')
         return
       }
-
       setMerchantName(data.merchantName || '')
-
       let suggestions: Record<string, string> = {}
       try {
         const catRes = await fetch('/api/categorize-items', {
@@ -141,7 +134,6 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
         const catData = await catRes.json()
         suggestions = catData.suggestions ?? {}
       } catch {}
-
       const defaultCategoryId = categories[0]?.id ?? ''
       setItems(data.items.map((item: any) => ({
         ...item,
@@ -155,48 +147,72 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
   }, [categories])
 
   useEffect(() => {
-    if (view !== 'scanning' || !videoRef.current) return
+    if (view !== 'scanning') return
 
-    let destroyed = false
+    let active = true
+    let stream: MediaStream | null = null
+    let scanTimer: ReturnType<typeof setTimeout> | null = null
 
-    async function startScanner() {
+    async function startCamera() {
       try {
-        const { default: QrScanner } = await import('qr-scanner')
-        if (destroyed) return
-
-        const scanner = new QrScanner(
-          videoRef.current!,
-          result => {
-            if (result.data.includes('suf.purs.gov.rs')) {
-              handleQrDetected(result.data)
-            }
-          },
-          {
-            preferredCamera: 'environment',
-            highlightScanRegion: false,
-            highlightCodeOutline: false,
-            returnDetailedScanResult: true,
-          }
-        )
-        scannerRef.current = scanner
-        await scanner.start()
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+        })
+        if (!active) { stream.getTracks().forEach(t => t.stop()); return }
+        const video = videoRef.current!
+        video.srcObject = stream
+        await video.play()
+        scheduleNextScan()
       } catch {
-        if (!destroyed) {
+        if (active) {
           setError('Nije moguće pristupiti kameri. Dozvoli pristup u podešavanjima browsera.')
           setView('error')
         }
       }
     }
 
-    startScanner()
+    function scheduleNextScan() {
+      scanTimer = setTimeout(scan, 250)
+    }
+
+    async function scan() {
+      if (!active) return
+
+      const video = videoRef.current
+      const canvas = canvasRef.current
+      if (!video || !canvas || video.readyState < video.HAVE_ENOUGH_DATA) {
+        scheduleNextScan()
+        return
+      }
+
+      // Try BarcodeDetector first (Chrome/Android — same engine as native camera)
+      if ('BarcodeDetector' in window) {
+        try {
+          const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] })
+          const codes = await detector.detect(video)
+          const match = codes.find((c: any) => c.rawValue?.includes('suf.purs.gov.rs'))
+          if (match) { handleQrDetected(match.rawValue); return }
+        } catch {}
+      } else {
+        // Fallback: jsQR via canvas
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+        const ctx = canvas.getContext('2d')!
+        ctx.drawImage(video, 0, 0)
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' })
+        if (code?.data.includes('suf.purs.gov.rs')) { handleQrDetected(code.data); return }
+      }
+
+      scheduleNextScan()
+    }
+
+    startCamera()
 
     return () => {
-      destroyed = true
-      if (scannerRef.current) {
-        scannerRef.current.stop()
-        scannerRef.current.destroy()
-        scannerRef.current = null
-      }
+      active = false
+      if (scanTimer) clearTimeout(scanTimer)
+      stream?.getTracks().forEach(t => t.stop())
     }
   }, [view, handleQrDetected])
 
@@ -206,7 +222,6 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
     const { data: { user } } = await supabase.auth.getUser()
     const today = new Date().toISOString().split('T')[0]
     const month = today.slice(0, 7)
-
     const rows = items.map(item => ({
       user_id: user!.id,
       member_id: currentMember?.id ?? null,
@@ -221,7 +236,6 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
       skip_accounting: alreadyPaid,
       note: merchantName || null,
     }))
-
     await supabase.from('transactions').insert(rows)
     onClose()
     router.refresh()
@@ -239,12 +253,11 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
       }}
       onClick={view === 'scanning' ? undefined : onClose}
     >
-      {/* Camera view */}
       {view === 'scanning' && (
         <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-          <video ref={videoRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
+          <video ref={videoRef} autoPlay playsInline muted style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          <canvas ref={canvasRef} style={{ display: 'none' }} />
 
-          {/* Overlay */}
           <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
             <div style={{
               width: 240, height: 240, borderRadius: 20,
@@ -273,7 +286,6 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
         </div>
       )}
 
-      {/* Loading */}
       {view === 'loading' && (
         <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
           <div style={{ width: 40, height: 40, borderRadius: '50%', border: '3px solid rgba(255,255,255,0.2)', borderTopColor: 'var(--accent)', animation: 'spin 0.8s linear infinite' }} />
@@ -282,7 +294,6 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
         </div>
       )}
 
-      {/* Error */}
       {view === 'error' && (
         <div
           style={{ width: '100%', maxWidth: 540, background: 'var(--card)', borderRadius: '28px 28px 0 0', padding: '28px 24px calc(32px + var(--safe-bottom))' }}
@@ -301,7 +312,6 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
         </div>
       )}
 
-      {/* Review */}
       {view === 'review' && (
         <div
           style={{ width: '100%', maxWidth: 540, background: 'var(--card)', borderRadius: '28px 28px 0 0', maxHeight: '92dvh', display: 'flex', flexDirection: 'column' }}
@@ -310,15 +320,10 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
           <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px', flexShrink: 0 }}>
             <div style={{ width: 36, height: 4, borderRadius: 4, background: 'var(--border-2)' }} />
           </div>
-
           <div style={{ padding: '8px 20px 12px', flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
-            <p style={{ fontSize: 17, fontWeight: 500, color: 'var(--text-1)', marginBottom: 2 }}>
-              {merchantName || 'Fiskalni račun'}
-            </p>
+            <p style={{ fontSize: 17, fontWeight: 500, color: 'var(--text-1)', marginBottom: 2 }}>{merchantName || 'Fiskalni račun'}</p>
             <p style={{ fontSize: 12, color: 'var(--text-3)' }}>{items.length} stavki · {fmt(total)} RSD</p>
           </div>
-
-          {/* Group selector */}
           <div style={{ padding: '12px 20px', flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
             <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 8 }}>Grupa za sve stavke</p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -339,23 +344,11 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
               ))}
             </div>
           </div>
-
-          {/* Items list */}
           <div style={{ overflowY: 'auto', flex: 1 }}>
             {items.map((item, i) => (
-              <div
-                key={i}
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '12px 20px',
-                  borderBottom: i < items.length - 1 ? '1px solid var(--border)' : 'none',
-                  gap: 10,
-                }}
-              >
+              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderBottom: i < items.length - 1 ? '1px solid var(--border)' : 'none', gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {item.name}
-                  </p>
+                  <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
                   <CategoryPicker
                     categories={categories}
                     value={item.categoryId}
@@ -364,20 +357,13 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
                   <p className="num" style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)' }}>{fmt(item.total)}</p>
-                  {item.quantity !== 1 && (
-                    <p style={{ fontSize: 10, color: 'var(--text-3)' }}>{item.quantity} × {fmt(item.unitPrice)}</p>
-                  )}
+                  {item.quantity !== 1 && <p style={{ fontSize: 10, color: 'var(--text-3)' }}>{item.quantity} × {fmt(item.unitPrice)}</p>}
                 </div>
               </div>
             ))}
           </div>
-
-          {/* Footer */}
           <div style={{ padding: '14px 20px', paddingBottom: 'calc(14px + var(--safe-bottom))', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
-            <div
-              onClick={() => setAlreadyPaid(v => !v)}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, cursor: 'pointer' }}
-            >
+            <div onClick={() => setAlreadyPaid(v => !v)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, cursor: 'pointer' }}>
               <div>
                 <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>Označi kao plaćeno</p>
                 <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>Ne utiče na dostupno ovog meseca</p>
@@ -386,19 +372,13 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
                 <span style={{ position: 'absolute', top: 3, left: alreadyPaid ? 21 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', display: 'block' }} />
               </div>
             </div>
-
-            <button
-              onClick={handleSave}
-              disabled={!bucketId}
-              className="btn-primary"
-            >
+            <button onClick={handleSave} disabled={!bucketId} className="btn-primary">
               Dodaj {items.length} {items.length === 1 ? 'stavku' : items.length < 5 ? 'stavke' : 'stavki'} · {fmt(total)} RSD
             </button>
           </div>
         </div>
       )}
 
-      {/* Saving */}
       {view === 'saving' && (
         <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
           <div style={{ width: 40, height: 40, borderRadius: '50%', border: '3px solid rgba(255,255,255,0.2)', borderTopColor: 'var(--accent)', animation: 'spin 0.8s linear infinite' }} />
