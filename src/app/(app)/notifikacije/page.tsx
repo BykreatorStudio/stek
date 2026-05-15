@@ -107,7 +107,7 @@ export default function NotifikacijePage() {
   const [loading, setLoading] = useState(true)
   const [householdId, setHouseholdId] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('sve')
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [selectedNotif, setSelectedNotif] = useState<Notif | null>(null)
   const currentUserIdRef = useRef<string | null>(null)
   const myMemberIdRef = useRef<string | null>(null)
   const supabase = createClient()
@@ -299,7 +299,7 @@ export default function NotifikacijePage() {
                         }]}
                       >
                         <div
-                          onClick={() => setExpandedId(expandedId === n.id ? null : n.id)}
+                          onClick={() => setSelectedNotif(n)}
                           style={{ padding: '14px 16px', position: 'relative', cursor: 'pointer' }}
                         >
                           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
@@ -327,19 +327,6 @@ export default function NotifikacijePage() {
                             </div>
                             <p style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0, marginLeft: 4, paddingTop: 2 }}>{timeAgo(n.created_at)}</p>
                           </div>
-                          {expandedId === n.id && n.type === 'ai_uvidi' && Array.isArray(n.data?.insights) && (
-                            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                              {n.data.insights.map((ins: any, idx: number) => {
-                                const tipColor = ins.tip === 'upozorenje' ? { bg: 'var(--red-light)', color: 'var(--red)' } : ins.tip === 'pozitivno' ? { bg: 'var(--accent-light)', color: 'var(--accent-dark)' } : { bg: 'var(--bg-subtle)', color: 'var(--text-2)' }
-                                return (
-                                  <div key={idx} style={{ background: tipColor.bg, borderRadius: 10, padding: '10px 12px' }}>
-                                    <p style={{ fontSize: 12, fontWeight: 500, color: tipColor.color, marginBottom: 3 }}>{ins.naslov}</p>
-                                    <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.45 }}>{ins.opis}</p>
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          )}
                         </div>
                       </SwipeActions>
                     )
@@ -350,6 +337,56 @@ export default function NotifikacijePage() {
           </div>
         )}
       </div>
+
+      {selectedNotif && (() => {
+        const icon = typeIcon(selectedNotif.type)
+        const hasInsights = selectedNotif.type === 'ai_uvidi' && Array.isArray(selectedNotif.data?.insights)
+        return (
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }}
+            onClick={() => setSelectedNotif(null)}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{ width: '100%', maxWidth: 540, background: 'var(--card)', borderRadius: '24px 24px 0 0', maxHeight: '80dvh', display: 'flex', flexDirection: 'column', paddingBottom: 'calc(20px + var(--safe-bottom))' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px', flexShrink: 0 }}>
+                <div style={{ width: 32, height: 4, borderRadius: 4, background: 'var(--border-2)' }} />
+              </div>
+              <div style={{ padding: '12px 20px 16px', borderBottom: hasInsights ? '1px solid var(--border)' : 'none', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', background: icon.bg, flexShrink: 0 }}>
+                    <svg width="18" height="18" viewBox={icon.viewBox}
+                      fill={icon.isFill ? icon.color : 'none'}
+                      stroke={icon.isFill ? 'none' : icon.color}
+                      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      {icon.paths.map((d, i) => <path key={i} d={d} />)}
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-1)' }}>{selectedNotif.title}</p>
+                    <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 1 }}>{timeAgo(selectedNotif.created_at)}</p>
+                  </div>
+                </div>
+                <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5, marginTop: 12 }}>{selectedNotif.body}</p>
+              </div>
+              {hasInsights && (
+                <div style={{ overflowY: 'auto', flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {selectedNotif.data.insights.map((ins: any, i: number) => {
+                    const s = ins.tip === 'upozorenje' ? { bg: 'var(--red-light)', color: 'var(--red)' } : ins.tip === 'pozitivno' ? { bg: 'var(--accent-light)', color: 'var(--accent-dark)' } : { bg: 'var(--bg-subtle)', color: 'var(--text-2)' }
+                    return (
+                      <div key={i} style={{ background: s.bg, borderRadius: 12, padding: '12px 14px' }}>
+                        <p style={{ fontSize: 13, fontWeight: 500, color: s.color, marginBottom: 4 }}>{ins.naslov}</p>
+                        <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5 }}>{ins.opis}</p>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
