@@ -142,7 +142,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
       const ctx = canvas.getContext('2d')!
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' })
+      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' })
       if (code?.data && code.data.includes('suf.purs.gov.rs')) {
         handleQrDetected(code.data)
         return

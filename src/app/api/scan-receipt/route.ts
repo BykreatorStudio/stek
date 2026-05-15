@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as cheerio from 'cheerio'
 import { createClient } from '@supabase/supabase-js'
+import Anthropic from '@anthropic-ai/sdk'
 
 function admin() {
   return createClient(
@@ -14,10 +15,6 @@ async function log(url: string, status: string, errorMsg: string | null, itemsFo
   try {
     await admin().from('qr_parse_logs').insert({ url, status, error_msg: errorMsg, items_found: itemsFound })
   } catch {}
-}
-
-function parseAmount(s: string): number {
-  return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0
 }
 
 export async function POST(req: NextRequest) {
@@ -35,7 +32,7 @@ export async function POST(req: NextRequest) {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'sr,en-US;q=0.7,en;q=0.3',
       },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(12000),
     })
     if (!res.ok) {
       await log(url, 'fetch_error', `HTTP ${res.status}`, 0)
@@ -47,97 +44,60 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Nije moguće učitati račun' }, { status: 502 })
   }
 
+  // Strip scripts and styles to reduce token count, keep structural HTML
   const $ = cheerio.load(html)
+  $('script, style, noscript, link, meta, svg').remove()
+  const cleanHtml = $.html().replace(/\s{2,}/g, ' ').trim().slice(0, 60000)
 
-  // Extract merchant name — try common selectors
-  const merchantName =
-    $('[class*="buyer"] strong, [class*="merchant"] strong, [class*="company"] strong, h2, h3').first().text().trim() ||
-    $('title').text().replace(/[-|].*$/, '').trim() ||
-    ''
+  try {
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const msg = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2048,
+      messages: [{
+        role: 'user',
+        content: `You are extracting data from a Serbian fiscal receipt verification page (suf.purs.gov.rs).
 
-  // Extract total — look for the last numeric element near "Ukupno" or "Total"
-  let totalAmount = 0
-  $('td, th, span, div').each((_, el) => {
-    const text = $(el).text().trim()
-    if (/ukupno|total|svega/i.test(text)) {
-      const next = $(el).next().text().trim()
-      const val = parseAmount(next)
-      if (val > totalAmount) totalAmount = val
-    }
-  })
+Return ONLY valid JSON, no explanation, no markdown:
+{
+  "merchantName": "store/company name or empty string",
+  "items": [
+    {"name": "item name", "quantity": 1.0, "unit": "KOM", "unitPrice": 100.0, "total": 100.0}
+  ]
+}
 
-  // Extract items — try all tables, pick the one that looks like an items table
-  const items: { name: string; quantity: number; unit: string; unitPrice: number; total: number }[] = []
+Rules:
+- quantity, unitPrice, total must be numbers (use . for decimals, not ,)
+- unit is typically KOM, kg, l, g, etc.
+- if item has no separate quantity/unitPrice, set quantity=1 and unitPrice=total
+- if no items found, return {"merchantName": "", "items": []}
 
-  $('table').each((_, table) => {
-    const rows = $(table).find('tr')
-    if (rows.length < 2) return
-
-    // Check header row for receipt-like columns
-    const headerText = rows.first().text().toLowerCase()
-    const looksLikeReceipt =
-      /naziv|artikal|opis|item|proizvod/.test(headerText) ||
-      /kol|qty|kolicin/.test(headerText) ||
-      /cena|price|iznos/.test(headerText)
-
-    if (!looksLikeReceipt && items.length === 0) {
-      // Try anyway if this is the only/first table with numeric data
-    }
-
-    rows.each((rowIdx, row) => {
-      if (rowIdx === 0) return // skip header
-      const cells = $(row).find('td')
-      if (cells.length < 3) return
-
-      const cellTexts = cells.toArray().map(c => $(c).text().trim())
-
-      // Heuristic: first cell is name (text), last cells are numbers
-      const name = cellTexts[0]
-      if (!name || name.length < 2) return
-
-      // Find numeric cells
-      const nums = cellTexts.slice(1).map(t => parseAmount(t)).filter(n => n > 0)
-      if (nums.length === 0) return
-
-      const total = nums[nums.length - 1]
-      const unitPrice = nums.length >= 2 ? nums[nums.length - 2] : total
-      const quantity = nums.length >= 3 ? nums[0] : (unitPrice > 0 ? total / unitPrice : 1)
-
-      // Try to find unit (JM column)
-      let unit = 'KOM'
-      cellTexts.slice(1).forEach(t => {
-        if (/^(kom|kg|l|g|m|pak|kut|boc|lit)/i.test(t.trim())) unit = t.trim().toUpperCase()
-      })
-
-      items.push({
-        name: name.replace(/\s+/g, ' '),
-        quantity: Math.round(quantity * 100) / 100,
-        unit,
-        unitPrice: Math.round(unitPrice * 100) / 100,
-        total: Math.round(total * 100) / 100,
-      })
+HTML:
+${cleanHtml}`,
+      }],
     })
 
-    if (items.length > 0) return false // break — found items
-  })
+    const raw = (msg.content[0] as any).text.trim()
+    const jsonStart = raw.indexOf('{')
+    const parsed = JSON.parse(raw.slice(jsonStart))
 
-  // If no table worked, try definition list or div-based layout
-  if (items.length === 0) {
-    $('[class*="item"], [class*="product"], [class*="article"]').each((_, el) => {
-      const text = $(el).text().trim()
-      const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
-      if (lines.length >= 2) {
-        const name = lines[0]
-        const amount = parseAmount(lines[lines.length - 1])
-        if (name && amount > 0) {
-          items.push({ name, quantity: 1, unit: 'KOM', unitPrice: amount, total: amount })
-        }
-      }
-    })
+    const items = (parsed.items ?? []).map((item: any) => ({
+      name: String(item.name ?? '').replace(/\s+/g, ' ').trim(),
+      quantity: Math.round((Number(item.quantity) || 1) * 100) / 100,
+      unit: String(item.unit || 'KOM').toUpperCase(),
+      unitPrice: Math.round((Number(item.unitPrice) || 0) * 100) / 100,
+      total: Math.round((Number(item.total) || 0) * 100) / 100,
+    })).filter((i: any) => i.name && i.total > 0)
+
+    const merchantName = String(parsed.merchantName ?? '').trim()
+    const totalAmount = items.reduce((s: number, i: any) => s + i.total, 0)
+
+    await log(url, items.length > 0 ? 'success' : 'parse_error',
+      items.length === 0 ? 'Claude found no items' : null, items.length)
+
+    return NextResponse.json({ items, merchantName, totalAmount })
+  } catch (err: any) {
+    await log(url, 'claude_error', err.message, 0)
+    return NextResponse.json({ error: 'Greška pri čitanju računa' }, { status: 500 })
   }
-
-  await log(url, items.length > 0 ? 'success' : 'parse_error',
-    items.length === 0 ? 'No items extracted from HTML' : null, items.length)
-
-  return NextResponse.json({ items, merchantName, totalAmount })
 }
