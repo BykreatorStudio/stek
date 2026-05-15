@@ -74,6 +74,7 @@ function typeIcon(type: string): IconDef {
     racun_placen:       { viewBox: '0 0 24 24', paths: ['M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'], color: '#5a9700', bg: '#edf6d0' },
     racun_upcoming:     { viewBox: '0 0 24 24', paths: ['M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z'], color: '#b45309', bg: 'rgba(180,83,9,0.1)' },
     racun_overdue:      { viewBox: '0 0 24 24', paths: ['M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z'], color: '#d93025', bg: 'rgba(217,48,37,0.1)' },
+    ai_uvidi:           { viewBox: '0 0 24 24', paths: ['M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z'], color: '#5a9700', bg: '#edf6d0' },
   }
   return icons[type] ?? { viewBox: '0 0 24 24', paths: ['M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 00-5-5.917V4a1 1 0 10-2 0v1.083A6 6 0 006 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9'], color: 'var(--text-2)', bg: 'var(--bg-subtle)' }
 }

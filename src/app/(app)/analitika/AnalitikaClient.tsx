@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useState, useMemo, useCallback } from 'react'
+import { notifyHousehold } from '@/lib/notify'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area, PieChart, Pie, Cell,
@@ -95,27 +96,31 @@ function EmptyChart() {
   )
 }
 
-const INSIGHT_COLORS: Record<string, string> = {
-  upozorenje: '#f87171',
-  savet: '#60a5fa',
-  pozitivno: '#C8FF31',
+const INSIGHT_STYLE: Record<string, { bg: string; color: string }> = {
+  upozorenje: { bg: 'var(--red-light)', color: 'var(--red)' },
+  savet:      { bg: 'var(--bg-subtle)', color: 'var(--text-2)' },
+  pozitivno:  { bg: 'var(--accent-light)', color: 'var(--accent-dark)' },
 }
 
 function InsightIcon({ tip }: { tip: string }) {
+  const color = INSIGHT_STYLE[tip]?.color ?? 'var(--text-2)'
   if (tip === 'upozorenje') return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
       <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
     </svg>
   )
   if (tip === 'pozitivno') return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C8FF31" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="20 6 9 17 4 12"/>
     </svg>
   )
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
+      <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/>
+      <line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
+      <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/>
     </svg>
   )
 }
@@ -152,6 +157,11 @@ export default function AnalitikaClient({
       if (!res.ok) { setInsightsError(json.error ?? 'Greška'); return }
       setInsights(json.insights)
       setGeneratedAt(json.generatedAt)
+      const upozorenja = json.insights.filter((i: Insight) => i.tip === 'upozorenje').length
+      const body = upozorenja > 0
+        ? `${json.insights.length} uvida · ${upozorenja} upozorenje`
+        : `${json.insights.length} uvida`
+      notifyHousehold({ type: 'ai_uvidi', title: 'AI analiza završena', body })
     } catch {
       setInsightsError('Nije moguće učitati analizu')
     } finally {
@@ -248,72 +258,68 @@ export default function AnalitikaClient({
       <div style={{ maxWidth: 520, margin: '0 auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
 
         {/* AI Insights */}
-        <div style={{ background: 'var(--card)', borderRadius: 20, padding: '18px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.03)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: insights.length > 0 ? 14 : 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-1)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2a7 7 0 017 7c0 2.62-1.44 4.92-3.58 6.16L15 17H9l-.42-1.84A7 7 0 015 9a7 7 0 017-7z"/>
-                <line x1="9" y1="21" x2="15" y2="21"/><line x1="9" y1="17" x2="15" y2="17"/>
-              </svg>
-              <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>AI uvidi</p>
-            </div>
+        <div style={{ background: 'var(--card)', borderRadius: 20, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.03)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 16px' }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>AI uvidi</p>
             {insights.length > 0 && !insightsLoading && (
-              <button onClick={fetchInsights} style={{ fontSize: 12, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', fontFamily: 'inherit' }}>
-                Osveži
+              <button onClick={fetchInsights} style={{ fontSize: 12, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>
+                Osveži analizu
               </button>
             )}
           </div>
 
           {insightsLoading && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '20px 0' }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 1s linear infinite' }}>
-                <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeOpacity="0.2"/>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 16px 20px' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}>
+                <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeOpacity="0.15"/>
                 <path d="M21 12a9 9 0 00-9-9"/>
               </svg>
-              <p style={{ fontSize: 13, color: 'var(--text-3)' }}>Analiziram...</p>
+              <p style={{ fontSize: 13, color: 'var(--text-3)' }}>Analiziram podatke...</p>
             </div>
           )}
 
           {!insightsLoading && insightsError && (
-            <div style={{ padding: '12px 0 4px' }}>
-              <p style={{ fontSize: 13, color: '#f87171' }}>{insightsError}</p>
-              <button onClick={fetchInsights} style={{ marginTop: 10, fontSize: 13, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit', textDecoration: 'underline' }}>
+            <div style={{ padding: '0 16px 18px' }}>
+              <p style={{ fontSize: 13, color: 'var(--red)', marginBottom: 10 }}>{insightsError}</p>
+              <button onClick={fetchInsights} style={{ fontSize: 13, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit', textDecoration: 'underline' }}>
                 Pokušaj ponovo
               </button>
             </div>
           )}
 
           {!insightsLoading && insights.length === 0 && !insightsError && (
-            <div style={{ paddingTop: 14 }}>
-              <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 14 }}>
-                Analiziraj prihode, rashode i kredite za konkretne savete.
+            <div style={{ padding: '0 16px 18px', borderTop: '1px solid var(--border)' }}>
+              <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '16px 0 14px' }}>
+                Analiziraj potrošnju i kredite za konkretne preporuke.
               </p>
-              <button onClick={fetchInsights} className="btn-primary" style={{ width: '100%' }}>
+              <button onClick={fetchInsights} className="btn-primary">
                 Analiziraj
               </button>
             </div>
           )}
 
           {!insightsLoading && insights.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {insights.map((ins, i) => (
-                <div key={i} style={{
-                  borderLeft: `3px solid ${INSIGHT_COLORS[ins.tip] ?? '#60a5fa'}`,
-                  paddingLeft: 12, paddingTop: 2, paddingBottom: 2,
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <InsightIcon tip={ins.tip} />
-                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{ins.naslov}</p>
+            <>
+              {insights.map((ins, i) => {
+                const s = INSIGHT_STYLE[ins.tip] ?? INSIGHT_STYLE.savet
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px', borderTop: '1px solid var(--border)' }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <InsightIcon tip={ins.tip} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0, paddingTop: 1 }}>
+                      <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', marginBottom: 4 }}>{ins.naslov}</p>
+                      <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.55 }}>{ins.opis}</p>
+                    </div>
                   </div>
-                  <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5 }}>{ins.opis}</p>
-                </div>
-              ))}
+                )
+              })}
               {generatedAt && (
-                <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+                <p style={{ fontSize: 11, color: 'var(--text-3)', padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
                   Generisano {fmtGenerated(generatedAt)}
                 </p>
               )}
-            </div>
+            </>
           )}
         </div>
 
