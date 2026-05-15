@@ -62,15 +62,34 @@ function parseJournal(journal: string): ReceiptItem[] {
     }
 
     // End of items section
-    if (inItems && /^(укупан|укупно|ukupan|ukupno|рабат|rabat|пдв|pdv|порез|porez|готовина|gotovina|картица|kartica|повраћај|povracaj)/iu.test(line)) {
+    if (inItems && /^(Укупан|Укупно|ukupan|ukupno|Рабат|rabat|ПДВ|pdv|Порез|porez|Готовина|gotovina|Картица|kartica)/i.test(line)) {
       break
     }
 
     if (!inItems) continue
     if (/^[=\-*\s]+$/.test(line)) continue
 
-    // Pattern 1 (single line with * or x): "NAME  QTY UNIT * PRICE = TOTAL [VAT]"
-    const p1 = /^(.+?)\s+([\d.,]+)\s+([A-Za-zКОМкомШТшт\.]+)\s*[*×xX]\s*([\d.,]+)\s*=?\s*([\d.,]+)\s*[A-GŠЕАБВГД]?\s*$/i.exec(line)
+    // Skip column header line "Назив Цена Кол. Укупно"
+    if (line.includes('Назив') || /^naziv\s+cena/i.test(line)) continue
+
+    // Pattern 0 (Vero/Maxi format): "NAME [UNIT] (TAX) PRICE QTY TOTAL"
+    // e.g. "KESA SREDNJA JUMBO [KOM] (Ђ) 20,99 1 20,99"
+    const p0 = /^(.+?)\s+\[\s*([A-Za-zКОМ]+)\s*\]\s+\([^)]+\)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s*$/.exec(line)
+    if (p0) {
+      const name = p0[1].replace(/\s*\([^)]*\)\s*$/, '').trim()
+      const unit = p0[2].toUpperCase()
+      const unitPrice = parseSrbNum(p0[3])
+      const qty = parseSrbNum(p0[4])
+      const total = parseSrbNum(p0[5])
+      if (name.length > 1 && total > 0 && qty > 0) {
+        items.push({ name, quantity: qty, unit, unitPrice, total })
+        pendingName = ''
+        continue
+      }
+    }
+
+    // Pattern 1 (single line with * or x): "NAME QTY UNIT * PRICE = TOTAL [VAT]"
+    const p1 = /^(.+?)\s+([\d.,]+)\s+([A-Za-zКОМШТ]+)\s*[*×xX]\s*([\d.,]+)\s*=?\s*([\d.,]+)\s*[A-GŠЕАБВГДЂ]?\s*$/i.exec(line)
     if (p1) {
       const name = p1[1].trim()
       const qty = parseSrbNum(p1[2])
@@ -83,8 +102,8 @@ function parseJournal(journal: string): ReceiptItem[] {
       }
     }
 
-    // Pattern 2 (single line no * =): "NAME  QTY UNIT  UNIT_PRICE  TOTAL [VAT]"
-    const p2 = /^(.+?)\s+([\d.,]+)\s+([A-Za-zКОМкомШТшт\.]+)\s+([\d.,]+)\s+([\d.,]+)\s*[A-GŠЕАБВГД]?\s*$/i.exec(line)
+    // Pattern 2 (single line no * =): "NAME QTY UNIT UNIT_PRICE TOTAL [VAT]"
+    const p2 = /^(.+?)\s+([\d.,]+)\s+([A-Za-zКОМШТ]+)\s+([\d.,]+)\s+([\d.,]+)\s*[A-GŠЕАБВГДЂ]?\s*$/i.exec(line)
     if (p2) {
       const name = p2[1].trim()
       const qty = parseSrbNum(p2[2])
@@ -97,8 +116,8 @@ function parseJournal(journal: string): ReceiptItem[] {
       }
     }
 
-    // Pattern 3 (detail line for multi-line format): "QTY UNIT * PRICE = TOTAL [VAT]"
-    const p3 = /^([\d.,]+)\s+([A-Za-zКОМкомШТшт\.]+)\s*[*×xX]?\s*([\d.,]+)\s*=?\s*([\d.,]+)\s*[A-GŠЕАБВГД]?\s*$/i.exec(line)
+    // Pattern 3 (multi-line detail): "QTY UNIT * PRICE = TOTAL [VAT]"
+    const p3 = /^([\d.,]+)\s+([A-Za-zКОМШТ]+)\s*[*×xX]?\s*([\d.,]+)\s*=?\s*([\d.,]+)\s*[A-GŠЕАБВГДЂ]?\s*$/i.exec(line)
     if (p3 && pendingName) {
       const qty = parseSrbNum(p3[1])
       const unitPrice = parseSrbNum(p3[3])
@@ -110,8 +129,8 @@ function parseJournal(journal: string): ReceiptItem[] {
       }
     }
 
-    // Pattern 4 (total-only detail line): "TOTAL [VAT]" when pendingName is set
-    const p4 = /^([\d.,]+)\s*[A-GŠЕАБВГД]\s*$/.exec(line)
+    // Pattern 4 (total-only multi-line detail): "TOTAL VAT" when pendingName is set
+    const p4 = /^([\d.,]+)\s*[A-GŠЕАБВГДЂ]\s*$/.exec(line)
     if (p4 && pendingName) {
       const total = parseSrbNum(p4[1])
       if (total > 0) {
@@ -121,9 +140,8 @@ function parseJournal(journal: string): ReceiptItem[] {
       }
     }
 
-    // Candidate name line — pure text or text with minimal digits
-    const digitCount = (line.match(/\d/g) ?? []).length
-    if (line.length > 1 && digitCount <= 2 && !/^[=\-*:]+$/.test(line)) {
+    // Candidate name line for multi-line format
+    if (line.length > 1 && !/^[=\-*:]+$/.test(line)) {
       pendingName = line
     } else {
       pendingName = ''
@@ -251,7 +269,7 @@ async function trySpecsApi(url: string): Promise<{ items: ReceiptItem[]; merchan
     const items = data.items
       .filter((i: any) => i.name && Number(i.total) > 0)
       .map((i: any) => ({
-        name: String(i.name).replace(/\s+/g, ' ').trim(),
+        name: String(i.name).replace(/\s*\[[^\]]*\]\s*$/, '').replace(/\s+/g, ' ').trim(),
         quantity: Math.round((Number(i.quantity) || 1) * 1000) / 1000,
         unit: 'KOM',
         unitPrice: Math.round((Number(i.unitPrice) || 0) * 100) / 100,
@@ -286,7 +304,7 @@ export async function POST(req: NextRequest) {
       const r2 = await trySpecsApi(url)
       debug += ' | ' + r2.debug
       items = r2.items
-      if (r2.merchantName) merchantName = r2.merchantName
+      if (!merchantName && r2.merchantName) merchantName = r2.merchantName
     }
   } catch (err: any) {
     await log(url, 'fetch_error', err.message, 0)
