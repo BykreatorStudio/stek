@@ -3,7 +3,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import QrScanner from 'qr-scanner'
+import { BarcodeDetector, setZXingModuleOverrides } from 'barcode-detector/ponyfill'
+
+setZXingModuleOverrides({
+  locateFile: (path: string) => path.endsWith('.wasm') ? '/zxing_reader.wasm' : path,
+})
 
 type Category = { id: string; name: string }
 type Bucket = { id: string; name: string }
@@ -133,7 +137,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
-  const qrEngineRef = useRef<any>(null)
+  const detectorRef = useRef<BarcodeDetector | null>(null)
   const categoriesRef = useRef<Category[]>([])
 
   const supabase = createClient()
@@ -214,11 +218,17 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
     if (!file) return
     setView('loading')
     try {
-      const result = await QrScanner.scanImage(file, { returnDetailedScanResult: true })
-      if (result.data.includes('suf.purs.gov.rs')) {
-        handleQrDetected(result.data)
+      const img = new Image()
+      img.src = URL.createObjectURL(file)
+      await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej })
+      URL.revokeObjectURL(img.src)
+      const detector = detectorRef.current ?? new BarcodeDetector({ formats: ['qr_code'] })
+      const codes = await detector.detect(img)
+      const match = codes.find((c) => c.rawValue?.includes('suf.purs.gov.rs'))
+      if (match) {
+        handleQrDetected(match.rawValue)
       } else {
-        setError('QR kod nije sa fiskalnog racuna.')
+        setError('QR kod nije pronadjen na fotografiji. Usmeri kameru direktno na QR kod i pokusaj ponovo.')
         setView('error')
       }
     } catch {
@@ -236,7 +246,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
 
     async function startCamera() {
       try {
-        qrEngineRef.current = await QrScanner.createQrEngine()
+        detectorRef.current = new BarcodeDetector({ formats: ['qr_code'] })
         stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
         })
@@ -260,16 +270,14 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
     async function scan() {
       if (!active) return
       const video = videoRef.current
-      if (!video || video.readyState < video.HAVE_ENOUGH_DATA) {
+      if (!video || video.readyState < video.HAVE_ENOUGH_DATA || !detectorRef.current) {
         scheduleNextScan()
         return
       }
       try {
-        const result = await QrScanner.scanImage(video, {
-          returnDetailedScanResult: true,
-          qrEngine: qrEngineRef.current ?? undefined,
-        })
-        if (result.data.includes('suf.purs.gov.rs')) { handleQrDetected(result.data); return }
+        const codes = await detectorRef.current.detect(video)
+        const match = codes.find((c) => c.rawValue?.includes('suf.purs.gov.rs'))
+        if (match) { handleQrDetected(match.rawValue); return }
       } catch {}
       scheduleNextScan()
     }
@@ -280,8 +288,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
       active = false
       if (scanTimer) clearTimeout(scanTimer)
       stream?.getTracks().forEach(t => t.stop())
-      if (qrEngineRef.current instanceof Worker) qrEngineRef.current.terminate()
-      qrEngineRef.current = null
+      detectorRef.current = null
     }
   }, [view, handleQrDetected])
 
