@@ -68,7 +68,7 @@ export default async function DashboardPage() {
     supabase.from('debt_payments').select('debt_id, amount, currency, date'),
     supabase.from('savings').select('amount'),
     supabase.from('savings').select('amount').gte('date', monthStart).lte('date', monthEnd),
-    supabase.from('members').select('*').order('created_at'),
+    supabase.from('members').select('*').not('user_id', 'is', null).order('created_at'),
     supabase.from('nbs_rates').select('eur_to_rsd').order('date', { ascending: false }).limit(1).single(),
     supabase.from('transactions').select('id, type, name, amount, currency, date, created_at, member:members(name), category:categories(name, bucket:buckets(name))').order('created_at', { ascending: false }).limit(10),
     supabase.from('savings').select('id, amount, date, created_at, sef:sefovi(name)').order('created_at', { ascending: false }).limit(10),
