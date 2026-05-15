@@ -55,7 +55,7 @@ function AlreadyPaidToggle({ value, onChange }: { value: boolean; onChange: (v: 
       style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', marginBottom: 16, borderTop: '1px solid var(--border)', cursor: 'pointer' }}
     >
       <div>
-        <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)' }}>Plaćeno ranije</p>
+        <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)' }}>Označi kao plaćeno</p>
         <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>Ne utiče na dostupno ovog meseca</p>
       </div>
       <div style={{ width: 44, height: 26, borderRadius: 13, background: value ? 'var(--accent)' : 'var(--border-2)', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
@@ -731,7 +731,7 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
 
   const ranijePlaćenoBadge = (
     <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 20, background: 'var(--bg-subtle)', color: 'var(--text-3)' }}>
-      Ranije plaćeno
+      Označeno
     </span>
   )
 
@@ -1001,7 +1001,7 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, cursor: 'pointer' }}
             >
               <div>
-                <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>Plaćeno ranije</p>
+                <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>Označi kao plaćeno</p>
                 <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>Ne utiče na dostupno</p>
               </div>
               <div style={{ width: 40, height: 24, borderRadius: 12, background: cekAlreadyPaid ? 'var(--accent)' : 'var(--border-2)', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
