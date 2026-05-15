@@ -233,7 +233,7 @@ export default async function DashboardPage() {
           {/* Hero balance */}
           <p style={{ fontSize: 12, color: 'var(--header-muted)', marginBottom: 6 }}>Dostupno ovog meseca</p>
           <p className="num" style={{
-            fontSize: 44, fontWeight: 500, lineHeight: 1, marginBottom: 8,
+            fontSize: 44, fontWeight: 500, lineHeight: 1, marginBottom: 18,
             color: !hasData ? 'var(--header-text)' : dostupno >= 0 ? 'var(--accent-on-dark)' : '#f87171',
           }}>
             {!hasData ? '—' : (dostupno >= 0 ? '+' : '-') + fmt(dostupno)}
