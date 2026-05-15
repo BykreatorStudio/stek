@@ -41,6 +41,7 @@ export default async function TroskoviPage({ searchParams }: { searchParams: Pro
     { data: debtPaysRaw },
     { data: bucketsRaw },
     { data: extraExpensesRaw },
+    { data: receiptsRaw },
     { data: nbsRateRaw },
   ] = await Promise.all([
     supabase.from('transactions').select('id, recurring_item_id, amount, skip_accounting').eq('month', month).not('recurring_item_id', 'is', null),
@@ -51,7 +52,8 @@ export default async function TroskoviPage({ searchParams }: { searchParams: Pro
     supabase.from('dugovi').select('*'),
     supabase.from('debt_payments').select('id, debt_id, amount, currency, date, note'),
     supabase.from('buckets').select('id, name'),
-    supabase.from('transactions').select('id, name, amount, currency, date, note, categories(name), buckets(name)').eq('month', month).eq('type', 'rashod').is('recurring_item_id', null).not('skip_accounting', 'is', true).order('date', { ascending: false }),
+    supabase.from('transactions').select('id, name, amount, currency, date, note, categories(name), buckets(name)').eq('month', month).eq('type', 'rashod').is('recurring_item_id', null).is('receipt_id', null).not('skip_accounting', 'is', true).order('date', { ascending: false }),
+    supabase.from('receipts').select('id, merchant_name, total_amount, date, buckets(name), transactions(id, name, amount, currency, categories(name))').eq('month', month).order('date', { ascending: false }),
     supabase.from('nbs_rates').select('eur_to_rsd').order('date', { ascending: false }).limit(1).single(),
   ])
 
@@ -86,6 +88,21 @@ export default async function TroskoviPage({ searchParams }: { searchParams: Pro
     bucketName: t.buckets?.name ?? '',
   }))
 
+  const receipts = (receiptsRaw ?? []).map((r: any) => ({
+    id: r.id,
+    merchantName: r.merchant_name,
+    totalAmount: r.total_amount,
+    date: r.date,
+    bucketName: r.buckets?.name ?? '',
+    items: (r.transactions ?? []).map((t: any) => ({
+      id: t.id,
+      name: t.name ?? '',
+      amount: t.amount,
+      currency: t.currency,
+      categoryName: t.categories?.name ?? '',
+    })),
+  }))
+
   const debts = (debtsRaw ?? []).map((d: any) => {
     const payments = (debtPaysRaw ?? []).filter((p: any) => p.debt_id === d.id)
     const paid = payments.reduce((s: number, p: any) => s + p.amount, 0)
@@ -109,7 +126,8 @@ export default async function TroskoviPage({ searchParams }: { searchParams: Pro
     allChecks.reduce((s: number, c: any) => s + c.quantity * CEK_VALUE, 0) +
     activeDebts.reduce((s: number, d: any) => s + toRSD(d.remaining, d.currency), 0) +
     settledDebtsThisMonth.reduce((s: number, d: any) => s + toRSD(d.total_amount, d.currency), 0) +
-    extraExpenses.reduce((s: number, e: any) => s + toRSD(e.amount, e.currency), 0)
+    extraExpenses.reduce((s: number, e: any) => s + toRSD(e.amount, e.currency), 0) +
+    receipts.reduce((s: number, r: any) => s + r.totalAmount, 0)
 
   const remainingAmount =
     recurring.filter((r: any) => !r.paid).reduce((s: number, r: any) => s + toRSD(r.amount ?? 0, r.currency), 0) +
@@ -198,6 +216,7 @@ export default async function TroskoviPage({ searchParams }: { searchParams: Pro
           checks={checks}
           debts={debts}
           extraExpenses={extraExpenses}
+          receipts={receipts}
           month={month}
           eurToRsd={eurToRsd}
           monthStart={monthStart}
