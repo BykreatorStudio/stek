@@ -26,6 +26,7 @@ export default async function AnalitikaPage() {
     { data: savingsHistoryRaw },
     { data: membersRaw },
     { data: nbsRateRaw },
+    { data: hmRaw },
   ] = await Promise.all([
     supabase.from('transactions').select('type, amount, currency, month, category_id, member_id, skip_accounting').gte('date', from).lte('date', to),
     supabase.from('categories').select('id, name, bucket_id'),
@@ -34,7 +35,10 @@ export default async function AnalitikaPage() {
     supabase.from('savings').select('amount, date').order('date', { ascending: true }),
     supabase.from('members').select('id, name').order('created_at'),
     supabase.from('nbs_rates').select('eur_to_rsd').order('date', { ascending: false }).limit(1).single(),
+    supabase.from('household_members').select('household_id').eq('user_id', user.id).single(),
   ])
+
+  const householdId = (hmRaw as any)?.household_id ?? null
 
   const txs = txsRaw ?? []
   const cats = catsRaw ?? []
@@ -111,6 +115,7 @@ export default async function AnalitikaPage() {
       savingsHistory={savingsHistory}
       totalSavings={totalSavings}
       members={members}
+      householdId={householdId}
     />
   )
 }

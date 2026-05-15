@@ -136,11 +136,13 @@ export default function AnalitikaClient({
   savingsHistory,
   totalSavings,
   members,
+  householdId,
 }: {
   monthlyData: MonthData[]
   savingsHistory: { label: string; value: number }[]
   totalSavings: number
   members: Member[]
+  householdId: string | null
 }) {
   const [period, setPeriod] = useState(6)
   const [insights, setInsights] = useState<Insight[]>([])
@@ -161,7 +163,7 @@ export default function AnalitikaClient({
       const body = upozorenja > 0
         ? `${json.insights.length} uvida · ${upozorenja} upozorenje`
         : `${json.insights.length} uvida`
-      notifyHousehold({ type: 'ai_uvidi', title: 'AI analiza završena', body })
+      notifyHousehold({ householdId, type: 'ai_uvidi', title: 'AI analiza završena', body })
     } catch {
       setInsightsError('Nije moguće učitati analizu')
     } finally {
