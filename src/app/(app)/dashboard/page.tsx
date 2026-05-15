@@ -56,6 +56,7 @@ export default async function DashboardPage() {
     { data: nbsRateRaw },
     { data: recentTxsRaw },
     { data: recentSavingsRaw },
+    { data: recentReceiptsRaw },
   ] = await Promise.all([
     supabase.from('members').select('name').eq('user_id', user.id).single(),
     supabase.from('transactions').select('*, member:members(name), category:categories(name, bucket:buckets(name))').eq('month', month),
@@ -70,8 +71,9 @@ export default async function DashboardPage() {
     supabase.from('savings').select('amount').gte('date', monthStart).lte('date', monthEnd),
     supabase.from('members').select('*').not('user_id', 'is', null).order('created_at'),
     supabase.from('nbs_rates').select('eur_to_rsd').order('date', { ascending: false }).limit(1).single(),
-    supabase.from('transactions').select('id, type, name, amount, currency, date, created_at, member:members(name), category:categories(name, bucket:buckets(name))').order('created_at', { ascending: false }).limit(10),
+    supabase.from('transactions').select('id, type, name, amount, currency, date, created_at, member:members(name), category:categories(name, bucket:buckets(name))').is('receipt_id', null).order('created_at', { ascending: false }).limit(10),
     supabase.from('savings').select('id, amount, date, created_at, sef:sefovi(name)').order('created_at', { ascending: false }).limit(10),
+    supabase.from('receipts').select('id, merchant_name, total_amount, date, created_at').order('created_at', { ascending: false }).limit(5),
   ])
 
   const transactions = txs ?? []
@@ -95,7 +97,17 @@ export default async function DashboardPage() {
     date: s.date,
     created_at: s.created_at,
   }))
-  const allRecent = [...recentTxs, ...savingsEntries]
+  const receiptEntries = (recentReceiptsRaw ?? []).map((r: any) => ({
+    id: `receipt-${r.id}`,
+    receiptId: r.id,
+    type: 'receipt',
+    name: r.merchant_name || 'Fiskalni račun',
+    amount: r.total_amount,
+    currency: 'RSD',
+    date: r.date,
+    created_at: r.created_at,
+  }))
+  const allRecent = [...recentTxs, ...savingsEntries, ...receiptEntries]
     .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 10)
   const eurToRsd: number = (nbsRateRaw as any)?.eur_to_rsd ?? 117
