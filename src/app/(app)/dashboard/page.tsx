@@ -109,13 +109,12 @@ export default async function DashboardPage() {
   const neto_savings = (savingsThisMonthRaw ?? []).reduce((s: number, r: any) => s + r.amount, 0)
 
   const debtPaysThisMonth = debtPays.filter((p: any) => p.date >= monthStart && p.date <= monthEnd)
-  const totalCreditRashodi = credits.filter((c: any) => paidCreditIds.has(c.id)).reduce((s: number, c: any) => s + toRSD(c.monthly_payment, c.currency), 0)
   const totalCekRashodi = checksThisMonth.filter((c: any) => c.status === 'isplacen').reduce((s: number, c: any) => s + c.quantity * CEK_VALUE, 0)
   const totalDugRashodi = debtPaysThisMonth.filter((p: any) => allDebts.find((d: any) => d.id === p.debt_id)?.direction === 'dugujemo').reduce((s: number, p: any) => s + toRSD(p.amount, p.currency), 0)
   const extraIncome = debtPaysThisMonth.filter((p: any) => allDebts.find((d: any) => d.id === p.debt_id)?.direction === 'duguju_nam').reduce((s: number, p: any) => s + toRSD(p.amount, p.currency), 0)
 
-  const dostupno = (totalPrihodi + extraIncome) - (totalRashodi + totalCreditRashodi + totalCekRashodi + totalDugRashodi) - neto_savings
-  const hasData = transactions.length > 0 || neto_savings !== 0 || totalCreditRashodi > 0 || totalCekRashodi > 0 || totalDugRashodi > 0 || extraIncome > 0
+  const dostupno = (totalPrihodi + extraIncome) - (totalRashodi + totalCekRashodi + totalDugRashodi) - neto_savings
+  const hasData = transactions.length > 0 || neto_savings !== 0 || totalCekRashodi > 0 || totalDugRashodi > 0 || extraIncome > 0
 
   // --- Debts split (mirror troškovi logic exactly) ---
   const allDebtsWithPaid = allDebts.map((d: any) => {
@@ -247,7 +246,6 @@ export default async function DashboardPage() {
               {totalPrihodi > 0 && <span>+{fmt(totalPrihodi)} prihodi</span>}
               {extraIncome > 0 && <span> · +{fmt(extraIncome)} vraćeno</span>}
               {totalRashodi > 0 && <span> · -{fmt(totalRashodi)} rashodi</span>}
-              {totalCreditRashodi > 0 && <span> · -{fmt(totalCreditRashodi)} krediti</span>}
               {totalCekRashodi > 0 && <span> · -{fmt(totalCekRashodi)} čekovi</span>}
               {totalDugRashodi > 0 && <span> · -{fmt(totalDugRashodi)} dugovi</span>}
               {neto_savings > 0 && <span> · -{fmt(neto_savings)} štednja</span>}
