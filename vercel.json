@@ -7,6 +7,22 @@
     {
       "path": "/api/cron/check-bills",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-summary",
+      "schedule": "0 15 * * 0"
+    },
+    {
+      "path": "/api/cron/monthly-summary",
+      "schedule": "0 6 1 2,3,5,6,8,9,11,12 *"
+    },
+    {
+      "path": "/api/cron/quarterly-summary",
+      "schedule": "0 6 1 1,4,7,10 *"
+    },
+    {
+      "path": "/api/cron/annual-summary",
+      "schedule": "0 8 1 1 *"
     }
   ]
 }

@@ -230,22 +230,30 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
         } catch {}
       }
 
-      // jsQR fallback — scale down to max 2000px (jsQR unreliable on high-res photos)
-      const MAX = 2000
-      const scale = Math.min(1, MAX / Math.max(img.width, img.height))
-      const w = Math.round(img.width * scale)
-      const h = Math.round(img.height * scale)
-      const canvas = document.createElement('canvas')
-      canvas.width = w
-      canvas.height = h
-      const ctx = canvas.getContext('2d')!
-      ctx.drawImage(img, 0, 0, w, h)
-      const imageData = ctx.getImageData(0, 0, w, h)
-      const code = jsQR(imageData.data, w, h, { inversionAttempts: 'attemptBoth' })
+      // jsQR fallback — try multiple scales (detection reliability varies by resolution)
+      const longest = Math.max(img.width, img.height)
+      const targetSizes = [2000, 1400, 900, 500].filter(s => s < longest)
+      targetSizes.unshift(longest)
 
-      if (code?.data.includes('suf.purs.gov.rs')) {
-        handleQrDetected(code.data)
-      } else {
+      let detected = false
+      for (const maxPx of targetSizes) {
+        const scale = Math.min(1, maxPx / longest)
+        const w = Math.round(img.width * scale)
+        const h = Math.round(img.height * scale)
+        const canvas = document.createElement('canvas')
+        canvas.width = w; canvas.height = h
+        const ctx = canvas.getContext('2d')!
+        ctx.drawImage(img, 0, 0, w, h)
+        const imageData = ctx.getImageData(0, 0, w, h)
+        const code = jsQR(imageData.data, w, h, { inversionAttempts: 'attemptBoth' })
+        if (code?.data.includes('suf.purs.gov.rs')) {
+          handleQrDetected(code.data)
+          detected = true
+          break
+        }
+      }
+
+      if (!detected) {
         setError('QR kod nije pronađen na fotografiji. Usmeri kameru direktno na QR kod i pokušaj ponovo.')
         setView('error')
       }
@@ -304,13 +312,24 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
         } catch {}
       }
 
-      // Always try jsQR as fallback (catches cases where BarcodeDetector throws or misses)
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
+      // jsQR: crop to the scanning box region (240×240 CSS px) for much better accuracy
+      const vw = video.videoWidth
+      const vh = video.videoHeight
+      const cw = video.clientWidth || window.innerWidth
+      const ch = video.clientHeight || window.innerHeight
+      const coverScale = Math.max(cw / vw, ch / vh)
+      const boxVidPx = Math.round(240 / coverScale)
+      const cropX = Math.max(0, Math.round((vw - boxVidPx) / 2))
+      const cropY = Math.max(0, Math.round((vh - boxVidPx) / 2))
+      const cropW = Math.min(boxVidPx, vw - cropX)
+      const cropH = Math.min(boxVidPx, vh - cropY)
+      const TARGET = 512
+      canvas.width = TARGET
+      canvas.height = TARGET
       const ctx = canvas.getContext('2d')!
-      ctx.drawImage(video, 0, 0)
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' })
+      ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, TARGET, TARGET)
+      const imageData = ctx.getImageData(0, 0, TARGET, TARGET)
+      const code = jsQR(imageData.data, TARGET, TARGET, { inversionAttempts: 'attemptBoth' })
       if (code?.data.includes('suf.purs.gov.rs')) { handleQrDetected(code.data); return }
 
       scheduleNextScan()
