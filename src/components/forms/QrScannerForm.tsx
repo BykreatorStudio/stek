@@ -17,9 +17,24 @@ function fmt(n: number) {
   return new Intl.NumberFormat('sr-Latn-RS').format(Math.round(n))
 }
 
-function CategoryPicker({ categories, value, onChange }: { categories: Category[]; value: string; onChange: (id: string) => void }) {
+function CategoryPicker({ categories, value, onChange, onAdd }: {
+  categories: Category[]; value: string; onChange: (id: string) => void
+  onAdd?: (name: string) => Promise<string | null>
+}) {
   const [open, setOpen] = useState(false)
+  const [addingNew, setAddingNew] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [saving, setSaving] = useState(false)
   const current = categories.find(c => c.id === value)
+
+  async function handleAdd() {
+    if (!newName.trim() || !onAdd) return
+    setSaving(true)
+    const id = await onAdd(newName.trim())
+    setSaving(false)
+    if (id) { onChange(id); setOpen(false); setAddingNew(false); setNewName('') }
+  }
+
   return (
     <div style={{ position: 'relative' }}>
       <button
@@ -40,10 +55,10 @@ function CategoryPicker({ categories, value, onChange }: { categories: Category[
             display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
             background: 'rgba(0,0,0,0.35)',
           }}
-          onClick={() => setOpen(false)}
+          onClick={() => { setOpen(false); setAddingNew(false); setNewName('') }}
         >
           <div
-            style={{ width: '100%', maxWidth: 540, background: 'var(--card)', borderRadius: '20px 20px 0 0', maxHeight: '60dvh', overflowY: 'auto', paddingBottom: 'calc(20px + var(--safe-bottom))' }}
+            style={{ width: '100%', maxWidth: 540, background: 'var(--card)', borderRadius: '20px 20px 0 0', maxHeight: '70dvh', overflowY: 'auto', paddingBottom: 'calc(20px + var(--safe-bottom))' }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}>
@@ -63,6 +78,41 @@ function CategoryPicker({ categories, value, onChange }: { categories: Category[
                 {c.name}
               </div>
             ))}
+            {onAdd && !addingNew && (
+              <div
+                onClick={() => setAddingNew(true)}
+                style={{ padding: '14px 20px', fontSize: 13, color: 'var(--accent-dark)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, borderTop: '1px solid var(--border)' }}
+              >
+                <span style={{ fontSize: 16, lineHeight: 1 }}>+</span> Dodaj kategoriju
+              </div>
+            )}
+            {onAdd && addingNew && (
+              <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8 }}>
+                <input
+                  autoFocus
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleAdd()}
+                  placeholder="Naziv kategorije"
+                  style={{
+                    flex: 1, padding: '10px 14px', borderRadius: 10, fontSize: 14,
+                    border: '1.5px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)',
+                    outline: 'none', fontFamily: 'inherit',
+                  }}
+                />
+                <button
+                  onClick={handleAdd}
+                  disabled={!newName.trim() || saving}
+                  style={{
+                    padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 500,
+                    border: 'none', background: 'var(--text-1)', color: '#fff', cursor: 'pointer',
+                    opacity: !newName.trim() || saving ? 0.5 : 1,
+                  }}
+                >
+                  {saving ? '...' : 'Dodaj'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -122,7 +172,8 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
         return
       }
       if (!data.items?.length) {
-        setError('Nisu pronađene stavke na računu.')
+        console.error('[scan-receipt] no items. debug:', data._debug)
+        setError(`Nisu pronađene stavke na računu.${data._debug ? `\n\nDebug: ${data._debug}` : ''}`)
         setView('error')
         return
       }
@@ -434,6 +485,19 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
                     categories={categories}
                     value={item.categoryId}
                     onChange={id => setItems(prev => prev.map((it, j) => j === i ? { ...it, categoryId: id } : it))}
+                    onAdd={async (name) => {
+                      const { data: inserted } = await supabase.from('categories')
+                        .insert({ name, type: 'rashod', is_active: true })
+                        .select('id').single()
+                      if (inserted?.id) {
+                        const newCat = { id: inserted.id, name }
+                        const updated = [...categoriesRef.current, newCat].sort((a, b) => a.name.localeCompare(b.name))
+                        setCategories(updated)
+                        categoriesRef.current = updated
+                        return inserted.id
+                      }
+                      return null
+                    }}
                   />
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>

@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
   // Step 1: Fetch the verification page — save session cookies for subsequent requests
   let html = ''
   let sessionCookies = ''
+  let finalUrl = url
   try {
     const res = await fetch(url, {
       headers: PAGE_HEADERS,
@@ -62,15 +63,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Greška pri učitavanju: HTTP ${res.status}` }, { status: 502 })
     }
     sessionCookies = extractCookies(res)
+    finalUrl = res.url || url  // final URL after redirects
     html = await res.text()
   } catch (err: any) {
     await log(url, 'fetch_error', err.message, 0)
     return NextResponse.json({ error: 'Nije moguće učitati račun' }, { status: 502 })
   }
 
-  // Step 2: Extract invoiceNumber and token from embedded JS (handles both single and double quotes)
-  const invoiceMatch = html.match(/viewModel\.InvoiceNumber\(['"]([^'"]+)['"]\)/)
-  const tokenMatch = html.match(/viewModel\.Token\(['"]([^'"]+)['"]\)/)
+  // Step 2: Extract invoiceNumber and token from embedded JS
+  const invoiceMatch = html.match(/viewModel\.InvoiceNumber\('([^']+)'\)/) ?? html.match(/viewModel\.InvoiceNumber\("([^"]+)"\)/)
+  const tokenMatch = html.match(/viewModel\.Token\('([^']+)'\)/) ?? html.match(/viewModel\.Token\("([^"]+)"\)/)
 
   if (!invoiceMatch || !tokenMatch) {
     await log(url, 'parse_error', 'invoiceNumber or token not found in HTML', 0)
@@ -97,7 +99,7 @@ export async function POST(req: NextRequest) {
       'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
       'X-Requested-With': 'XMLHttpRequest',
       'Origin': 'https://suf.purs.gov.rs',
-      'Referer': url,
+      'Referer': finalUrl,
       'Sec-Fetch-Dest': 'empty',
       'Sec-Fetch-Mode': 'cors',
       'Sec-Fetch-Site': 'same-origin',
@@ -150,5 +152,5 @@ export async function POST(req: NextRequest) {
   const logMsg = items.length === 0 ? `No items. Debug: ${specsDebug}` : null
   await log(url, logStatus, logMsg, items.length)
 
-  return NextResponse.json({ items, merchantName, totalAmount })
+  return NextResponse.json({ items, merchantName, totalAmount, _debug: specsDebug })
 }
