@@ -84,6 +84,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
+  const categoriesRef = useRef<Category[]>([])
 
   const supabase = createClient()
   const router = useRouter()
@@ -99,7 +100,11 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
       if (data?.[0]) setBucketId(data[0].id)
     })
     supabase.from('categories').select('id, name').eq('type', 'rashod').eq('is_active', true).order('name')
-      .then(({ data }) => setCategories(data ?? []))
+      .then(({ data }) => {
+        const cats = data ?? []
+        setCategories(cats)
+        categoriesRef.current = cats
+      })
   }, [])
 
   const handleQrDetected = useCallback(async (qrUrl: string) => {
@@ -122,20 +127,25 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
         return
       }
       setMerchantName(data.merchantName || '')
+
+      const cats = categoriesRef.current
       let suggestions: Record<string, string> = {}
-      try {
-        const catRes = await fetch('/api/categorize-items', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            itemNames: data.items.map((i: any) => i.name),
-            categories: categories.map(c => ({ id: c.id, name: c.name })),
-          }),
-        })
-        const catData = await catRes.json()
-        suggestions = catData.suggestions ?? {}
-      } catch {}
-      const defaultCategoryId = categories[0]?.id ?? ''
+      if (cats.length > 0) {
+        try {
+          const catRes = await fetch('/api/categorize-items', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              itemNames: data.items.map((i: any) => i.name),
+              categories: cats.map(c => ({ id: c.id, name: c.name })),
+            }),
+          })
+          const catData = await catRes.json()
+          suggestions = catData.suggestions ?? {}
+        } catch {}
+      }
+
+      const defaultCategoryId = cats[0]?.id ?? ''
       setItems(data.items.map((item: any) => ({
         ...item,
         categoryId: suggestions[item.name] || defaultCategoryId,
@@ -145,7 +155,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
       setError('Greška pri komunikaciji sa serverom')
       setView('error')
     }
-  }, [categories])
+  }, [])
 
   async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
