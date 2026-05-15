@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import jsQR from 'jsqr'
+import QrScanner from 'qr-scanner'
 
 type Category = { id: string; name: string }
 type Bucket = { id: string; name: string }
@@ -132,8 +132,8 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
   const [currentMember, setCurrentMember] = useState<{ id: string; household_id: string } | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
+  const qrEngineRef = useRef<any>(null)
   const categoriesRef = useRef<Category[]>([])
 
   const supabase = createClient()
@@ -213,52 +213,16 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
     const file = e.target.files?.[0]
     if (!file) return
     setView('loading')
-
     try {
-      const img = new Image()
-      img.src = URL.createObjectURL(file)
-      await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej })
-      URL.revokeObjectURL(img.src)
-
-      // Try BarcodeDetector first (faster, works on full-res)
-      if ('BarcodeDetector' in window) {
-        try {
-          const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] })
-          const codes = await detector.detect(img)
-          const match = codes.find((c: any) => c.rawValue?.includes('suf.purs.gov.rs'))
-          if (match) { handleQrDetected(match.rawValue); return }
-        } catch {}
-      }
-
-      // jsQR fallback — try multiple scales (detection reliability varies by resolution)
-      const longest = Math.max(img.width, img.height)
-      const targetSizes = [2000, 1400, 900, 500].filter(s => s < longest)
-      targetSizes.unshift(longest)
-
-      let detected = false
-      for (const maxPx of targetSizes) {
-        const scale = Math.min(1, maxPx / longest)
-        const w = Math.round(img.width * scale)
-        const h = Math.round(img.height * scale)
-        const canvas = document.createElement('canvas')
-        canvas.width = w; canvas.height = h
-        const ctx = canvas.getContext('2d')!
-        ctx.drawImage(img, 0, 0, w, h)
-        const imageData = ctx.getImageData(0, 0, w, h)
-        const code = jsQR(imageData.data, w, h, { inversionAttempts: 'attemptBoth' })
-        if (code?.data.includes('suf.purs.gov.rs')) {
-          handleQrDetected(code.data)
-          detected = true
-          break
-        }
-      }
-
-      if (!detected) {
-        setError('QR kod nije pronađen na fotografiji. Usmeri kameru direktno na QR kod i pokušaj ponovo.')
+      const result = await QrScanner.scanImage(file, { returnDetailedScanResult: true })
+      if (result.data.includes('suf.purs.gov.rs')) {
+        handleQrDetected(result.data)
+      } else {
+        setError('QR kod nije sa fiskalnog racuna.')
         setView('error')
       }
     } catch {
-      setError('Greška pri obradi fotografije.')
+      setError('QR kod nije pronadjen na fotografiji. Usmeri kameru direktno na QR kod i pokusaj ponovo.')
       setView('error')
     }
   }
@@ -272,6 +236,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
 
     async function startCamera() {
       try {
+        qrEngineRef.current = await QrScanner.createQrEngine()
         stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
         })
@@ -282,7 +247,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
         scheduleNextScan()
       } catch {
         if (active) {
-          setError('Nije moguće pristupiti kameri. Dozvoli pristup u podešavanjima browsera.')
+          setError('Nije moguce pristupiti kameri. Dozvoli pristup u podesavanjima browsera.')
           setView('error')
         }
       }
@@ -294,44 +259,18 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
 
     async function scan() {
       if (!active) return
-
       const video = videoRef.current
-      const canvas = canvasRef.current
-      if (!video || !canvas || video.readyState < video.HAVE_ENOUGH_DATA) {
+      if (!video || video.readyState < video.HAVE_ENOUGH_DATA) {
         scheduleNextScan()
         return
       }
-
-      // Try BarcodeDetector first (native, faster)
-      if ('BarcodeDetector' in window) {
-        try {
-          const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] })
-          const codes = await detector.detect(video)
-          const match = codes.find((c: any) => c.rawValue?.includes('suf.purs.gov.rs'))
-          if (match) { handleQrDetected(match.rawValue); return }
-        } catch {}
-      }
-
-      // jsQR: crop to the scanning box region (240×240 CSS px) for much better accuracy
-      const vw = video.videoWidth
-      const vh = video.videoHeight
-      const cw = video.clientWidth || window.innerWidth
-      const ch = video.clientHeight || window.innerHeight
-      const coverScale = Math.max(cw / vw, ch / vh)
-      const boxVidPx = Math.round(240 / coverScale)
-      const cropX = Math.max(0, Math.round((vw - boxVidPx) / 2))
-      const cropY = Math.max(0, Math.round((vh - boxVidPx) / 2))
-      const cropW = Math.min(boxVidPx, vw - cropX)
-      const cropH = Math.min(boxVidPx, vh - cropY)
-      const TARGET = 512
-      canvas.width = TARGET
-      canvas.height = TARGET
-      const ctx = canvas.getContext('2d')!
-      ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, TARGET, TARGET)
-      const imageData = ctx.getImageData(0, 0, TARGET, TARGET)
-      const code = jsQR(imageData.data, TARGET, TARGET, { inversionAttempts: 'attemptBoth' })
-      if (code?.data.includes('suf.purs.gov.rs')) { handleQrDetected(code.data); return }
-
+      try {
+        const result = await QrScanner.scanImage(video, {
+          returnDetailedScanResult: true,
+          qrEngine: qrEngineRef.current ?? undefined,
+        })
+        if (result.data.includes('suf.purs.gov.rs')) { handleQrDetected(result.data); return }
+      } catch {}
       scheduleNextScan()
     }
 
@@ -341,6 +280,8 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
       active = false
       if (scanTimer) clearTimeout(scanTimer)
       stream?.getTracks().forEach(t => t.stop())
+      if (qrEngineRef.current instanceof Worker) qrEngineRef.current.terminate()
+      qrEngineRef.current = null
     }
   }, [view, handleQrDetected])
 
@@ -408,7 +349,6 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
       {view === 'scanning' && (
         <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <video ref={videoRef} autoPlay playsInline muted style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-          <canvas ref={canvasRef} style={{ display: 'none' }} />
 
           <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
             <div style={{
