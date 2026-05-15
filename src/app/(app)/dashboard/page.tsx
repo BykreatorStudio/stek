@@ -65,7 +65,7 @@ export default async function DashboardPage() {
     supabase.from('credits').select('*').eq('status', 'aktivan'),
     supabase.from('credit_payments').select('credit_id').gte('date', monthStart).lte('date', monthEnd),
     supabase.from('dugovi').select('*'),
-    supabase.from('debt_payments').select('debt_id, amount, date'),
+    supabase.from('debt_payments').select('debt_id, amount, currency, date'),
     supabase.from('savings').select('amount'),
     supabase.from('savings').select('amount').gte('date', monthStart).lte('date', monthEnd),
     supabase.from('members').select('*').order('created_at'),
@@ -99,13 +99,23 @@ export default async function DashboardPage() {
     .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 10)
   const eurToRsd: number = (nbsRateRaw as any)?.eur_to_rsd ?? 117
+  const paidCreditIds = new Set(creditPays.map((p: any) => p.credit_id))
 
   // --- Month cash flow ---
-  const totalPrihodi = transactions.filter((t: any) => t.type === 'prihod').reduce((s: number, t: any) => s + t.amount, 0)
-  const totalRashodi = transactions.filter((t: any) => t.type === 'rashod').reduce((s: number, t: any) => s + t.amount, 0)
+  const toRSD = (amount: number, currency: string) => currency === 'EUR' ? amount * eurToRsd : amount
+
+  const totalPrihodi = transactions.filter((t: any) => t.type === 'prihod').reduce((s: number, t: any) => s + toRSD(t.amount, t.currency), 0)
+  const totalRashodi = transactions.filter((t: any) => t.type === 'rashod').reduce((s: number, t: any) => s + toRSD(t.amount, t.currency), 0)
   const neto_savings = (savingsThisMonthRaw ?? []).reduce((s: number, r: any) => s + r.amount, 0)
-  const dostupno = totalPrihodi - totalRashodi - neto_savings
-  const hasData = transactions.length > 0 || neto_savings !== 0
+
+  const debtPaysThisMonth = debtPays.filter((p: any) => p.date >= monthStart && p.date <= monthEnd)
+  const totalCreditRashodi = credits.filter((c: any) => paidCreditIds.has(c.id)).reduce((s: number, c: any) => s + toRSD(c.monthly_payment, c.currency), 0)
+  const totalCekRashodi = checksThisMonth.filter((c: any) => c.status === 'isplacen').reduce((s: number, c: any) => s + c.quantity * CEK_VALUE, 0)
+  const totalDugRashodi = debtPaysThisMonth.filter((p: any) => allDebts.find((d: any) => d.id === p.debt_id)?.direction === 'dugujemo').reduce((s: number, p: any) => s + toRSD(p.amount, p.currency), 0)
+  const extraIncome = debtPaysThisMonth.filter((p: any) => allDebts.find((d: any) => d.id === p.debt_id)?.direction === 'duguju_nam').reduce((s: number, p: any) => s + toRSD(p.amount, p.currency), 0)
+
+  const dostupno = (totalPrihodi + extraIncome) - (totalRashodi + totalCreditRashodi + totalCekRashodi + totalDugRashodi) - neto_savings
+  const hasData = transactions.length > 0 || neto_savings !== 0 || totalCreditRashodi > 0 || totalCekRashodi > 0 || totalDugRashodi > 0 || extraIncome > 0
 
   // --- Debts split (mirror troškovi logic exactly) ---
   const allDebtsWithPaid = allDebts.map((d: any) => {
@@ -121,7 +131,6 @@ export default async function DashboardPage() {
   // --- Monthly obligations (identical to troškovi) ---
   const paidRecurringExpenseIds = new Set(transactions.filter((t: any) => t.recurring_item_id && t.type === 'rashod').map((t: any) => t.recurring_item_id))
   const paidRecurringIncomeIds = new Set(transactions.filter((t: any) => t.recurring_item_id && t.type === 'prihod').map((t: any) => t.recurring_item_id))
-  const paidCreditIds = new Set(creditPays.map((p: any) => p.credit_id))
   const paidRecurringCount = recurringExpense.filter((r: any) => paidRecurringExpenseIds.has(r.id)).length
   const paidCreditCount = credits.filter((c: any) => paidCreditIds.has(c.id)).length
   const paidChecksThisMonth = checksThisMonth.filter((c: any) => c.status === 'isplacen').length
