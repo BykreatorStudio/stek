@@ -79,7 +79,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
   const [buckets, setBuckets] = useState<Bucket[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [alreadyPaid, setAlreadyPaid] = useState(false)
-  const [currentMember, setCurrentMember] = useState<{ id: string } | null>(null)
+  const [currentMember, setCurrentMember] = useState<{ id: string; household_id: string } | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -92,7 +92,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
-      supabase.from('members').select('id').eq('user_id', user.id).single()
+      supabase.from('members').select('id, household_id').eq('user_id', user.id).single()
         .then(({ data }) => { if (data) setCurrentMember(data) })
     })
     supabase.from('buckets').select('id, name').order('name').then(({ data }) => {
@@ -145,10 +145,16 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
         } catch {}
       }
 
-      const defaultCategoryId = cats[0]?.id ?? ''
+      // Case-insensitive fallback lookup — Claude might return slightly different casing
+      const suggestionsLower = new Map(
+        Object.entries(suggestions).map(([k, v]) => [k.trim().toLowerCase(), v])
+      )
+      const getCat = (name: string) =>
+        suggestions[name] || suggestionsLower.get(name.trim().toLowerCase()) || ''
+
       setItems(data.items.map((item: any) => ({
         ...item,
-        categoryId: suggestions[item.name] || defaultCategoryId,
+        categoryId: getCat(item.name),
       })))
       setView('review')
     } catch {
@@ -260,14 +266,31 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
   }, [view, handleQrDetected])
 
   async function handleSave() {
-    if (!items.length || !bucketId) return
+    if (!items.length || !bucketId || !currentMember) return
     setView('saving')
     const { data: { user } } = await supabase.auth.getUser()
     const today = new Date().toISOString().split('T')[0]
     const month = today.slice(0, 7)
+    const totalAmount = items.reduce((s, i) => s + i.total, 0)
+
+    const { data: receipt, error } = await supabase.from('receipts').insert({
+      household_id: currentMember.household_id,
+      merchant_name: merchantName || 'Fiskalni račun',
+      total_amount: totalAmount,
+      date: today,
+      month,
+      bucket_id: bucketId,
+    }).select('id').single()
+
+    if (error || !receipt) {
+      setError('Greška pri čuvanju računa.')
+      setView('error')
+      return
+    }
+
     const rows = items.map(item => ({
       user_id: user!.id,
-      member_id: currentMember?.id ?? null,
+      member_id: currentMember.id,
       bucket_id: bucketId,
       category_id: item.categoryId || null,
       type: 'rashod',
@@ -278,6 +301,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
       month,
       skip_accounting: alreadyPaid,
       note: merchantName || null,
+      receipt_id: receipt.id,
     }))
     await supabase.from('transactions').insert(rows)
     onClose()
