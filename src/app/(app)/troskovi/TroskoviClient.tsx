@@ -14,7 +14,7 @@ type RecurringItem = {
   id: string; name: string; amount: number | null; currency: string
   due_day: number; type: 'fiksni' | 'varijabilni'
   bucket_id: string; category_id: string; bucketName: string
-  paid: boolean; paidAmount: number | null; transactionId: string | null
+  paid: boolean; paidAmount: number | null; transactionId: string | null; skipAcc: boolean
 }
 
 type Credit = {
@@ -47,6 +47,23 @@ function fmtDate(v: string) {
 }
 
 function today() { return new Date().toISOString().split('T')[0] }
+
+function AlreadyPaidToggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div
+      onClick={() => onChange(!value)}
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', marginBottom: 16, borderTop: '1px solid var(--border)', cursor: 'pointer' }}
+    >
+      <div>
+        <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)' }}>Plaćeno ranije</p>
+        <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>Ne utiče na dostupno ovog meseca</p>
+      </div>
+      <div style={{ width: 44, height: 26, borderRadius: 13, background: value ? 'var(--accent)' : 'var(--border-2)', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+        <span style={{ position: 'absolute', top: 3, left: value ? 21 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', display: 'block' }} />
+      </div>
+    </div>
+  )
+}
 
 function defaultDateForMonth(month: string, dueDay?: number): string {
   if (dueDay) {
@@ -109,6 +126,7 @@ function PayRecurringModal({ item, month, eurToRsd, onClose }: { item: Recurring
   const [view, setView] = useState<'main' | 'calendar'>('main')
   const [loading, setLoading] = useState(false)
   const [errMsg, setErrMsg] = useState('')
+  const [alreadyPaid, setAlreadyPaid] = useState(false)
   const [currentMember, setCurrentMember] = useState<{ id: string; name: string } | null>(null)
   const supabase = createClient()
   const router = useRouter()
@@ -131,6 +149,7 @@ function PayRecurringModal({ item, month, eurToRsd, onClose }: { item: Recurring
       recurring_item_id: item.id, user_id: user!.id,
       member_id: currentMember?.id ?? null, name: item.name,
       type: 'rashod', amount: a, currency, date, month,
+      skip_accounting: alreadyPaid,
     })
     setLoading(false)
     if (error) { setErrMsg(error.message); return }
@@ -233,6 +252,7 @@ function PayRecurringModal({ item, month, eurToRsd, onClose }: { item: Recurring
             </svg>
           </button>
           {errMsg && <p style={{ fontSize: 13, color: 'var(--red)', marginBottom: 8 }}>{errMsg}</p>}
+          <AlreadyPaidToggle value={alreadyPaid} onChange={setAlreadyPaid} />
           <button onClick={handlePay} disabled={loading || !parseAmount(amount)} className="btn-primary">
             {loading ? 'Čuvanje...' : 'Označi kao plaćeno'}
           </button>
@@ -247,6 +267,7 @@ function PayKreditModal({ credit, month, onClose }: { credit: Credit; month: str
   const [view, setView] = useState<'main' | 'calendar'>('main')
   const [loading, setLoading] = useState(false)
   const [errMsg, setErrMsg] = useState('')
+  const [alreadyPaid, setAlreadyPaid] = useState(false)
   const [currentMember, setCurrentMember] = useState<{ id: string; name: string } | null>(null)
   const supabase = createClient()
   const router = useRouter()
@@ -261,11 +282,21 @@ function PayKreditModal({ credit, month, onClose }: { credit: Credit; month: str
 
   async function handlePay() {
     setLoading(true)
+    const { data: { user } } = await supabase.auth.getUser()
     const { error } = await supabase.from('credit_payments').insert({
       credit_id: credit.id, amount: credit.monthly_payment, date,
     })
+    if (error) { setErrMsg(error.message); setLoading(false); return }
+    if (alreadyPaid) {
+      await supabase.from('transactions').insert({
+        user_id: user!.id, member_id: currentMember?.id ?? null,
+        name: credit.name, type: 'rashod',
+        amount: credit.monthly_payment, currency: credit.currency,
+        date, month, skip_accounting: true,
+        bucket_id: credit.bucket_id,
+      })
+    }
     setLoading(false)
-    if (error) { setErrMsg(error.message); return }
     const fmtN = (n: number) => new Intl.NumberFormat('sr-Latn-RS').format(Math.round(n))
     notifyHousehold({
       triggeredByMemberId: currentMember?.id,
@@ -313,6 +344,7 @@ function PayKreditModal({ credit, month, onClose }: { credit: Credit; month: str
             </svg>
           </button>
           {errMsg && <p style={{ fontSize: 13, color: 'var(--red)', marginBottom: 8 }}>{errMsg}</p>}
+          <AlreadyPaidToggle value={alreadyPaid} onChange={setAlreadyPaid} />
           <button onClick={handlePay} disabled={loading} className="btn-primary">
             {loading ? 'Čuvanje...' : 'Označi kao plaćeno'}
           </button>
@@ -329,6 +361,7 @@ function DebtModal({ debt, month, onClose }: { debt: Debt; month: string; onClos
   const [view, setView] = useState<'main' | 'calendar'>('main')
   const [loading, setLoading] = useState(false)
   const [errMsg, setErrMsg] = useState('')
+  const [alreadyPaid, setAlreadyPaid] = useState(false)
   const [confirmSettle, setConfirmSettle] = useState(false)
   const [currentMember, setCurrentMember] = useState<{ id: string; name: string } | null>(null)
   const supabase = createClient()
@@ -348,11 +381,21 @@ function DebtModal({ debt, month, onClose }: { debt: Debt; month: string; onClos
     const a = parseAmount(amount)
     if (!a || a <= 0) return
     setLoading(true)
+    const { data: { user } } = await supabase.auth.getUser()
     const { error } = await supabase.from('debt_payments').insert({
       debt_id: debt.id, amount: a, currency: debt.currency, date,
       note: note.trim() || null,
     })
     if (error) { setErrMsg(error.message); setLoading(false); return }
+
+    if (alreadyPaid && debt.direction === 'dugujemo') {
+      await supabase.from('transactions').insert({
+        user_id: user!.id, member_id: currentMember?.id ?? null,
+        name: debt.name, type: 'rashod',
+        amount: a, currency: debt.currency,
+        date, month, skip_accounting: true,
+      })
+    }
 
     const fmtN = (n: number) => new Intl.NumberFormat('sr-Latn-RS').format(Math.round(n))
     const memberName = currentMember?.name ?? 'Neko'
@@ -373,7 +416,7 @@ function DebtModal({ debt, month, onClose }: { debt: Debt; month: string; onClos
       })
     }
     setLoading(false)
-    setAmount(''); setNote(''); setErrMsg('')
+    setAmount(''); setNote(''); setAlreadyPaid(false); setErrMsg('')
     router.refresh()
   }
 
@@ -522,6 +565,7 @@ function DebtModal({ debt, month, onClose }: { debt: Debt; month: string; onClos
               }}
             />
             {errMsg && <p style={{ fontSize: 13, color: 'var(--red)', marginBottom: 8 }}>{errMsg}</p>}
+            {debt.direction === 'dugujemo' && <AlreadyPaidToggle value={alreadyPaid} onChange={setAlreadyPaid} />}
             <button onClick={addPayment} disabled={loading || !parseAmount(amount)} className="btn-primary" style={{ marginBottom: 10 }}>
               {loading ? 'Čuvanje...' : 'Dodaj uplatu'}
             </button>
@@ -555,6 +599,7 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
   const [payingCredit, setPayingCredit] = useState<Credit | null>(null)
   const [openDebtId, setOpenDebtId] = useState<string | null>(null)
   const [confirmPayCheck, setConfirmPayCheck] = useState<Check | null>(null)
+  const [cekAlreadyPaid, setCekAlreadyPaid] = useState(false)
   const [confirmUndo, setConfirmUndo] = useState<{ name: string; undoType: 'recurring' | 'credit' | 'check' | 'debt'; undoId: string } | null>(null)
   const [confirmDeleteCek, setConfirmDeleteCek] = useState<string | null>(null)
   const [confirmDeleteDebt, setConfirmDeleteDebt] = useState<string | null>(null)
@@ -567,11 +612,20 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
   const supabase = createClient()
   const router = useRouter()
 
-  async function markCekPaid(id: string) {
+  async function markCekPaid(id: string, skipAccounting = false) {
     await supabase.from('cekovi').update({ status: 'isplacen', cleared_at: new Date().toISOString() }).eq('id', id)
     const { data: { user } } = await supabase.auth.getUser()
     const { data: member } = await supabase.from('members').select('id, name').eq('user_id', user!.id).single()
     const cek = checks.find(c => c.id === id)
+    if (skipAccounting && cek) {
+      const cekMonth = cek.date.slice(0, 7)
+      await supabase.from('transactions').insert({
+        user_id: user!.id, member_id: member?.id ?? null,
+        name: `${cek.quantity} ${cek.quantity === 1 ? 'ček' : cek.quantity < 5 ? 'čeka' : 'čekova'}`,
+        type: 'rashod', amount: cek.quantity * CEK_VALUE, currency: 'RSD',
+        date: cek.date, month: cekMonth, skip_accounting: true,
+      })
+    }
     notifyHousehold({
       triggeredByMemberId: member?.id,
       type: 'cek',
@@ -641,10 +695,10 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
   )
 
   const allPaid = [
-    ...paidRecurring.map(r => ({ id: r.id, name: r.name, sub: r.bucketName, amount: r.paidAmount ?? r.amount, currency: r.currency, undoType: 'recurring' as const, undoId: r.transactionId ?? '' })),
-    ...paidCredits.map(c => ({ id: c.id, name: c.name, sub: c.bucketName, amount: c.monthly_payment, currency: c.currency, undoType: 'credit' as const, undoId: c.creditPaymentId ?? '' })),
-    ...paidChecks.map(c => ({ id: c.id, name: `${c.quantity} ${c.quantity === 1 ? 'ček' : c.quantity < 5 ? 'čeka' : 'čekova'}`, sub: fmtDate(c.date), amount: c.quantity * CEK_VALUE, currency: 'RSD', undoType: 'check' as const, undoId: c.id })),
-    ...settledDebtsThisMonth.map(d => ({ id: d.id, name: d.name, sub: d.direction === 'dugujemo' ? 'Primljena pozajmica' : 'Data pozajmica', amount: d.total_amount, currency: d.currency, undoType: 'debt' as const, undoId: d.id })),
+    ...paidRecurring.map(r => ({ id: r.id, name: r.name, sub: r.bucketName, amount: r.paidAmount ?? r.amount, currency: r.currency, undoType: 'recurring' as const, undoId: r.transactionId ?? '', skipAcc: r.skipAcc })),
+    ...paidCredits.map(c => ({ id: c.id, name: c.name, sub: c.bucketName, amount: c.monthly_payment, currency: c.currency, undoType: 'credit' as const, undoId: c.creditPaymentId ?? '', skipAcc: false })),
+    ...paidChecks.map(c => ({ id: c.id, name: `${c.quantity} ${c.quantity === 1 ? 'ček' : c.quantity < 5 ? 'čeka' : 'čekova'}`, sub: fmtDate(c.date), amount: c.quantity * CEK_VALUE, currency: 'RSD', undoType: 'check' as const, undoId: c.id, skipAcc: false })),
+    ...settledDebtsThisMonth.map(d => ({ id: d.id, name: d.name, sub: d.direction === 'dugujemo' ? 'Primljena pozajmica' : 'Data pozajmica', amount: d.total_amount, currency: d.currency, undoType: 'debt' as const, undoId: d.id, skipAcc: false })),
   ]
 
   const isEmpty = recurring.length === 0 && credits.length === 0 && pendingChecks.length === 0 && activeDebts.length === 0 && extraExpenses.length === 0 && allPaid.length === 0
@@ -672,6 +726,12 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
   const paidBadge = (
     <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 20, background: 'var(--accent-light)', color: 'var(--accent-dark)' }}>
       Plaćeno
+    </span>
+  )
+
+  const ranijePlaćenoBadge = (
+    <span style={{ fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 20, background: 'var(--bg-subtle)', color: 'var(--text-3)' }}>
+      Ranije plaćeno
     </span>
   )
 
@@ -869,7 +929,7 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
                           {fmt(item.amount)} <span style={{ fontSize: 11, opacity: 0.6 }}>{item.currency}</span>
                         </p>
                       )}
-                      {paidBadge}
+                      {item.skipAcc ? ranijePlaćenoBadge : paidBadge}
                     </div>
                   </div>
                 </SwipeActions>
@@ -933,15 +993,27 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
             onClick={e => e.stopPropagation()}
           >
             <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-1)', marginBottom: 8 }}>Označi ček kao isplaćen?</p>
-            <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 20 }}>
+            <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 16 }}>
               {confirmPayCheck.quantity} {confirmPayCheck.quantity === 1 ? 'ček' : confirmPayCheck.quantity < 5 ? 'čeka' : 'čekova'} · {fmt(confirmPayCheck.quantity * CEK_VALUE)} RSD
             </p>
+            <div
+              onClick={() => setCekAlreadyPaid(!cekAlreadyPaid)}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, cursor: 'pointer' }}
+            >
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>Plaćeno ranije</p>
+                <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>Ne utiče na dostupno</p>
+              </div>
+              <div style={{ width: 40, height: 24, borderRadius: 12, background: cekAlreadyPaid ? 'var(--accent)' : 'var(--border-2)', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+                <span style={{ position: 'absolute', top: 2, left: cekAlreadyPaid ? 18 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', display: 'block' }} />
+              </div>
+            </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setConfirmPayCheck(null)} style={{
+              <button onClick={() => { setConfirmPayCheck(null); setCekAlreadyPaid(false) }} style={{
                 flex: 1, padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500,
                 border: '1.5px solid var(--border)', background: 'var(--card)', color: 'var(--text-2)', cursor: 'pointer',
               }}>Otkaži</button>
-              <button onClick={() => { markCekPaid(confirmPayCheck.id); setConfirmPayCheck(null) }} style={{
+              <button onClick={() => { markCekPaid(confirmPayCheck.id, cekAlreadyPaid); setConfirmPayCheck(null); setCekAlreadyPaid(false) }} style={{
                 flex: 1, padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500,
                 border: 'none', background: 'var(--text-1)', color: '#fff', cursor: 'pointer',
               }}>Potvrdi</button>

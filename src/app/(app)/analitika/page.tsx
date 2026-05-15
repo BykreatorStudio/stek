@@ -27,7 +27,7 @@ export default async function AnalitikaPage() {
     { data: membersRaw },
     { data: nbsRateRaw },
   ] = await Promise.all([
-    supabase.from('transactions').select('type, amount, currency, month, category_id, member_id').gte('date', from).lte('date', to),
+    supabase.from('transactions').select('type, amount, currency, month, category_id, member_id, skip_accounting').gte('date', from).lte('date', to),
     supabase.from('categories').select('id, name, bucket_id'),
     supabase.from('buckets').select('id, name'),
     supabase.from('savings').select('amount'),
@@ -50,14 +50,14 @@ export default async function AnalitikaPage() {
   // Monthly data with per-category and per-bucket breakdown
   const monthlyData = months.map(m => {
     const mTxs = txs.filter((t: any) => t.month === m)
-    const prihodi = mTxs.filter((t: any) => t.type === 'prihod').reduce((s: number, t: any) => s + toRSD(t.amount, t.currency), 0)
-    const rashodi = mTxs.filter((t: any) => t.type === 'rashod').reduce((s: number, t: any) => s + toRSD(t.amount, t.currency), 0)
+    const prihodi = mTxs.filter((t: any) => t.type === 'prihod' && !t.skip_accounting).reduce((s: number, t: any) => s + toRSD(t.amount, t.currency), 0)
+    const rashodi = mTxs.filter((t: any) => t.type === 'rashod' && !t.skip_accounting).reduce((s: number, t: any) => s + toRSD(t.amount, t.currency), 0)
 
     const catBreakdown: Record<string, number> = {}
     const bucketBreakdown: Record<string, number> = {}
     const memberBreakdown: Record<string, { prihodi: number; rashodi: number }> = {}
 
-    mTxs.filter((t: any) => t.type === 'rashod').forEach((t: any) => {
+    mTxs.filter((t: any) => t.type === 'rashod' && !t.skip_accounting).forEach((t: any) => {
       const amount = toRSD(t.amount, t.currency)
       if (t.category_id) {
         const cat = catMap.get(t.category_id)
@@ -72,7 +72,7 @@ export default async function AnalitikaPage() {
     })
 
     mTxs.forEach((t: any) => {
-      if (!t.member_id) return
+      if (!t.member_id || t.skip_accounting) return
       if (!memberBreakdown[t.member_id]) memberBreakdown[t.member_id] = { prihodi: 0, rashodi: 0 }
       if (t.type === 'prihod') memberBreakdown[t.member_id].prihodi += toRSD(t.amount, t.currency)
       else if (t.type === 'rashod') memberBreakdown[t.member_id].rashodi += toRSD(t.amount, t.currency)

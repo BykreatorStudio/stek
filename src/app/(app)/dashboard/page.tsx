@@ -104,8 +104,8 @@ export default async function DashboardPage() {
   // --- Month cash flow ---
   const toRSD = (amount: number, currency: string) => currency === 'EUR' ? amount * eurToRsd : amount
 
-  const totalPrihodi = transactions.filter((t: any) => t.type === 'prihod').reduce((s: number, t: any) => s + toRSD(t.amount, t.currency), 0)
-  const totalRashodi = transactions.filter((t: any) => t.type === 'rashod').reduce((s: number, t: any) => s + toRSD(t.amount, t.currency), 0)
+  const totalPrihodi = transactions.filter((t: any) => t.type === 'prihod' && !t.skip_accounting).reduce((s: number, t: any) => s + toRSD(t.amount, t.currency), 0)
+  const totalRashodi = transactions.filter((t: any) => t.type === 'rashod' && !t.skip_accounting).reduce((s: number, t: any) => s + toRSD(t.amount, t.currency), 0)
   const neto_savings = (savingsThisMonthRaw ?? []).reduce((s: number, r: any) => s + r.amount, 0)
 
   const debtPaysThisMonth = debtPays.filter((p: any) => p.date >= monthStart && p.date <= monthEnd)

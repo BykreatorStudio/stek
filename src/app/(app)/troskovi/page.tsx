@@ -43,7 +43,7 @@ export default async function TroskoviPage({ searchParams }: { searchParams: Pro
     { data: extraExpensesRaw },
     { data: nbsRateRaw },
   ] = await Promise.all([
-    supabase.from('transactions').select('id, recurring_item_id, amount').eq('month', month).not('recurring_item_id', 'is', null),
+    supabase.from('transactions').select('id, recurring_item_id, amount, skip_accounting').eq('month', month).not('recurring_item_id', 'is', null),
     supabase.from('recurring_items').select('id, name, amount, currency, due_day, type, bucket_id, category_id').eq('is_active', true).eq('is_income', false).order('due_day'),
     supabase.from('credits').select('id, name, monthly_payment, due_day, bucket_id, currency, original_amount, remaining_amount').eq('status', 'aktivan').order('due_day'),
     supabase.from('credit_payments').select('id, credit_id').gte('date', monthStart).lte('date', monthEnd),
@@ -51,7 +51,7 @@ export default async function TroskoviPage({ searchParams }: { searchParams: Pro
     supabase.from('dugovi').select('*'),
     supabase.from('debt_payments').select('id, debt_id, amount, currency, date, note'),
     supabase.from('buckets').select('id, name'),
-    supabase.from('transactions').select('id, name, amount, currency, date, note, categories(name), buckets(name)').eq('month', month).eq('type', 'rashod').is('recurring_item_id', null).order('date', { ascending: false }),
+    supabase.from('transactions').select('id, name, amount, currency, date, note, categories(name), buckets(name)').eq('month', month).eq('type', 'rashod').is('recurring_item_id', null).not('skip_accounting', 'is', true).order('date', { ascending: false }),
     supabase.from('nbs_rates').select('eur_to_rsd').order('date', { ascending: false }).limit(1).single(),
   ])
 
@@ -59,13 +59,13 @@ export default async function TroskoviPage({ searchParams }: { searchParams: Pro
   const toRSD = (amount: number, currency: string) => currency === 'EUR' ? amount * eurToRsd : amount
 
   const buckets = bucketsRaw ?? []
-  const paidRecurringMap = new Map((txsRaw ?? []).map((t: any) => [t.recurring_item_id, { id: t.id, amount: t.amount }]))
+  const paidRecurringMap = new Map((txsRaw ?? []).map((t: any) => [t.recurring_item_id, { id: t.id, amount: t.amount, skipAcc: t.skip_accounting ?? false }]))
   const paidCreditMap = new Map((creditPaysRaw ?? []).map((p: any) => [p.credit_id, p.id]))
 
   const recurring = (recurringRaw ?? []).map((r: any) => {
     const paidInfo = paidRecurringMap.get(r.id)
     const bucket = buckets.find((b: any) => b.id === r.bucket_id)
-    return { ...r, bucketName: bucket?.name ?? '', paid: !!paidInfo, paidAmount: paidInfo?.amount ?? null, transactionId: paidInfo?.id ?? null }
+    return { ...r, bucketName: bucket?.name ?? '', paid: !!paidInfo, paidAmount: paidInfo?.amount ?? null, transactionId: paidInfo?.id ?? null, skipAcc: paidInfo?.skipAcc ?? false }
   })
 
   const credits = (creditsRaw ?? []).map((c: any) => {
