@@ -83,6 +83,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const photoInputRef = useRef<HTMLInputElement>(null)
 
   const supabase = createClient()
   const router = useRouter()
@@ -145,6 +146,38 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
       setView('error')
     }
   }, [categories])
+
+  async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setView('loading')
+
+    try {
+      const img = new Image()
+      img.src = URL.createObjectURL(file)
+      await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej })
+
+      const canvas = document.createElement('canvas')
+      canvas.width = img.width
+      canvas.height = img.height
+      const ctx = canvas.getContext('2d')!
+      ctx.drawImage(img, 0, 0)
+      URL.revokeObjectURL(img.src)
+
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' })
+
+      if (code?.data.includes('suf.purs.gov.rs')) {
+        handleQrDetected(code.data)
+      } else {
+        setError('QR kod nije pronađen na fotografiji. Usmeri kameru direktno na QR kod i pokušaj ponovo.')
+        setView('error')
+      }
+    } catch {
+      setError('Greška pri obradi fotografije.')
+      setView('error')
+    }
+  }
 
   useEffect(() => {
     if (view !== 'scanning') return
@@ -283,6 +316,26 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
+
+          {/* Photo capture fallback */}
+          <div style={{ position: 'absolute', bottom: 'calc(40px + var(--safe-bottom))', zIndex: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>Skener ne radi?</p>
+            <label style={{
+              padding: '10px 22px', borderRadius: 24, fontSize: 14, fontWeight: 500,
+              background: 'rgba(255,255,255,0.15)', border: '1.5px solid rgba(255,255,255,0.3)',
+              color: '#fff', cursor: 'pointer', backdropFilter: 'blur(8px)',
+            }}>
+              Fotografišui QR kod
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                style={{ display: 'none' }}
+                onChange={handlePhotoCapture}
+              />
+            </label>
+          </div>
         </div>
       )}
 
