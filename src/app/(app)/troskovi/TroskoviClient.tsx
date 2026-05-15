@@ -119,7 +119,7 @@ function Sheet({ onClose, children }: { onClose: () => void; children: React.Rea
   )
 }
 
-function PayRecurringModal({ item, month, eurToRsd, onClose }: { item: RecurringItem; month: string; eurToRsd: number; onClose: () => void }) {
+function PayRecurringModal({ item, month, eurToRsd, onClose, onPaid }: { item: RecurringItem; month: string; eurToRsd: number; onClose: () => void; onPaid?: (id: string) => void }) {
   const [amount, setAmount] = useState(item.amount ? formatAmount(String(item.amount).replace('.', ',')) : '')
   const [currency, setCurrency] = useState<'RSD' | 'EUR'>(item.currency as 'RSD' | 'EUR')
   const [date, setDate] = useState(() => defaultDateForMonth(month, item.due_day))
@@ -160,7 +160,7 @@ function PayRecurringModal({ item, month, eurToRsd, onClose }: { item: Recurring
       title: 'Račun plaćen',
       body: `${currentMember?.name ?? 'Neko'} · ${item.name} · ${fmtN(a)} ${currency}`,
     })
-    onClose(); router.refresh()
+    if (onPaid) { onPaid(item.id) } else { onClose(); router.refresh() }
   }
 
   function handleCurrencyChange(c: 'RSD' | 'EUR') {
@@ -262,7 +262,7 @@ function PayRecurringModal({ item, month, eurToRsd, onClose }: { item: Recurring
   )
 }
 
-function PayKreditModal({ credit, month, onClose }: { credit: Credit; month: string; onClose: () => void }) {
+function PayKreditModal({ credit, month, onClose, onPaid }: { credit: Credit; month: string; onClose: () => void; onPaid?: (id: string) => void }) {
   const [date, setDate] = useState(() => defaultDateForMonth(month, credit.due_day))
   const [view, setView] = useState<'main' | 'calendar'>('main')
   const [loading, setLoading] = useState(false)
@@ -304,7 +304,7 @@ function PayKreditModal({ credit, month, onClose }: { credit: Credit; month: str
       title: 'Rata plaćena',
       body: `${currentMember?.name ?? 'Neko'} · ${credit.name} · ${fmtN(credit.monthly_payment)} ${credit.currency}`,
     })
-    onClose(); router.refresh()
+    if (onPaid) { onPaid(credit.id) } else { onClose(); router.refresh() }
   }
 
   return (
@@ -598,6 +598,7 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
   recurring: RecurringItem[]; credits: Credit[]; checks: Check[]; debts: Debt[]
   extraExpenses: ExtraExpense[]; receipts: Receipt[]; month: string; eurToRsd: number; monthStart: string; monthEnd: string
 }) {
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set())
   const [payingRecurring, setPayingRecurring] = useState<RecurringItem | null>(null)
   const [payingCredit, setPayingCredit] = useState<Credit | null>(null)
   const [openDebtId, setOpenDebtId] = useState<string | null>(null)
@@ -614,6 +615,8 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
   const [openReceiptItems, setOpenReceiptItems] = useState<ReceiptItem[] | null>(null)
   const [confirmDeleteReceipt, setConfirmDeleteReceipt] = useState<string | null>(null)
   const [editAmount, setEditAmount] = useState<RecurringItem | null>(null)
+  function markPending(id: string) { setPendingIds(prev => new Set([...prev, id])) }
+
   const openDebt = openDebtId ? debts.find(d => d.id === openDebtId) ?? null : null
   const supabase = createClient()
   const router = useRouter()
@@ -774,6 +777,7 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
             {unpaidRecurring.map(r => {
               const overdue = isMonthOverdue(r.due_day)
+              const pending = pendingIds.has(r.id)
               const actions: SwipeAction[] = [
                 { label: 'Plati', color: 'primary', onClick: () => setPayingRecurring(r) },
                 ...(r.type === 'varijabilni' ? [{ label: 'Izmeni', color: 'neutral' as const, onClick: () => setEditAmount(r) }] : []),
@@ -781,7 +785,7 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
               ]
               return (
                 <SwipeActions key={r.id} actions={actions}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', opacity: pending ? 0.35 : 1, transition: 'opacity 0.25s', pointerEvents: pending ? 'none' : 'auto' }}>
                     <div>
                       <p style={{ fontSize: 14, fontWeight: 500, color: overdue ? 'var(--red)' : 'var(--text-1)', marginBottom: 3 }}>{r.name}</p>
                       <p style={{ fontSize: 11, color: overdue ? 'var(--red)' : 'var(--text-3)' }}>
@@ -812,12 +816,13 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
             {unpaidCredits.map(c => {
               const overdue = isMonthOverdue(c.due_day)
+              const pending = pendingIds.has(c.id)
               return (
                 <SwipeActions key={c.id} actions={[
                   { label: 'Plati', color: 'primary', onClick: () => setPayingCredit(c) },
                   { label: 'Obriši', color: 'danger', onClick: () => setConfirmDeleteCredit(c) },
                 ]}>
-                  <div style={{ padding: '14px 16px' }}>
+                  <div style={{ padding: '14px 16px', opacity: pending ? 0.35 : 1, transition: 'opacity 0.25s', pointerEvents: pending ? 'none' : 'auto' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                       <div>
                         <p style={{ fontSize: 14, fontWeight: 500, color: overdue ? 'var(--red)' : 'var(--text-1)', marginBottom: 3 }}>{c.name}</p>
@@ -970,9 +975,9 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
         </>
       )}
 
-      {(extraExpenses.length > 0 || receipts.length > 0) && (
+      {receipts.length > 0 && (
         <>
-          <p className="section-label">Ostali troškovi</p>
+          <p className="section-label">Fiskalni računi</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
             {receipts.map(r => (
               <SwipeActions
@@ -1000,6 +1005,14 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
                 </div>
               </SwipeActions>
             ))}
+          </div>
+        </>
+      )}
+
+      {extraExpenses.length > 0 && (
+        <>
+          <p className="section-label">Ostali troškovi</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
             {extraExpenses.map(e => (
               <SwipeActions
                 key={e.id}
@@ -1111,10 +1124,18 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
       )}
 
       {payingRecurring && (
-        <PayRecurringModal item={payingRecurring} month={month} eurToRsd={eurToRsd} onClose={() => setPayingRecurring(null)} />
+        <PayRecurringModal
+          item={payingRecurring} month={month} eurToRsd={eurToRsd}
+          onClose={() => setPayingRecurring(null)}
+          onPaid={(id) => { markPending(id); setPayingRecurring(null); router.refresh() }}
+        />
       )}
       {payingCredit && (
-        <PayKreditModal credit={payingCredit} month={month} onClose={() => setPayingCredit(null)} />
+        <PayKreditModal
+          credit={payingCredit} month={month}
+          onClose={() => setPayingCredit(null)}
+          onPaid={(id) => { markPending(id); setPayingCredit(null); router.refresh() }}
+        />
       )}
       {openDebt && (
         <DebtModal debt={openDebt} month={month} onClose={() => setOpenDebtId(null)} />

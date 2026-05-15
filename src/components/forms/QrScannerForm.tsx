@@ -349,7 +349,13 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
       note: merchantName || null,
       receipt_id: receipt.id,
     }))
-    await supabase.from('transactions').insert(rows)
+    const { error: txError } = await supabase.from('transactions').insert(rows)
+    if (txError) {
+      await supabase.from('receipts').delete().eq('id', receipt.id)
+      setError(`Greška pri čuvanju stavki: ${txError.message}`)
+      setView('error')
+      return
+    }
     onClose()
     router.refresh()
   }
