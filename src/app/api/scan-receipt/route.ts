@@ -118,12 +118,15 @@ async function tryJsonApi(url: string): Promise<{ items: ReceiptItem[]; merchant
 
   // Fall back to journal parsing
   const journal = result?.journal ?? result?.Journal ?? data?.journal ?? ''
+  const topKeys = Object.keys(data ?? {}).join(',')
+  const resultKeys = result && result !== data ? Object.keys(result).join(',') : ''
   if (journal) {
     const items = parseJournal(journal)
-    return { items, merchantName, debug: debug + ` journal_parsed items=${items.length} first=${firstItemDump}` }
+    const journalSnippet = journal.replace(/\r/g, '').slice(0, 400)
+    return { items, merchantName, debug: debug + ` journal_parsed items=${items.length} topKeys=${topKeys} resultKeys=${resultKeys} journal=<<${journalSnippet}>>` }
   }
 
-  return { items: [], merchantName, debug: debug + ` no_items keys=${Object.keys(data ?? {}).join(',')} first=${firstItemDump}` }
+  return { items: [], merchantName, debug: debug + ` no_items topKeys=${topKeys} resultKeys=${resultKeys}` }
 }
 
 // Strategy 2: HTML page + /specifications POST (original approach)
