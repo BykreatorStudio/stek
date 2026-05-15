@@ -240,18 +240,6 @@ export default async function DashboardPage() {
             {hasData && <span style={{ fontSize: 20, color: 'var(--header-muted)', fontWeight: 400, marginLeft: 8 }}>RSD</span>}
           </p>
 
-          {/* Breakdown */}
-          {hasData && (
-            <p style={{ fontSize: 11, color: 'var(--header-muted)', marginBottom: 18, lineHeight: 1.6 }}>
-              {totalPrihodi > 0 && <span>+{fmt(totalPrihodi)} prihodi</span>}
-              {extraIncome > 0 && <span> · +{fmt(extraIncome)} vraćeno</span>}
-              {totalRashodi > 0 && <span> · -{fmt(totalRashodi)} rashodi</span>}
-              {totalCekRashodi > 0 && <span> · -{fmt(totalCekRashodi)} čekovi</span>}
-              {totalDugRashodi > 0 && <span> · -{fmt(totalDugRashodi)} dugovi</span>}
-              {neto_savings > 0 && <span> · -{fmt(neto_savings)} štednja</span>}
-            </p>
-          )}
-
           {/* Prihodi / Rashodi / Sefovi */}
           <div style={{ display: 'flex', gap: 10 }}>
             <div style={{ flex: 1, background: 'rgba(255,255,255,0.07)', borderRadius: 12, padding: '12px 14px', border: '1px solid rgba(255,255,255,0.08)' }}>
