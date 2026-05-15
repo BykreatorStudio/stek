@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+@view-transition {
+  navigation: auto;
+}
+
 :root {
   /* Backgrounds */
   --page-bg: #f4f4f2;

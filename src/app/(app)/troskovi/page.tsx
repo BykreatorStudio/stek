@@ -53,7 +53,7 @@ export default async function TroskoviPage({ searchParams }: { searchParams: Pro
     supabase.from('debt_payments').select('id, debt_id, amount, currency, date, note'),
     supabase.from('buckets').select('id, name'),
     supabase.from('transactions').select('id, name, amount, currency, date, note, categories(name), buckets(name)').eq('month', month).eq('type', 'rashod').is('recurring_item_id', null).is('receipt_id', null).not('skip_accounting', 'is', true).order('date', { ascending: false }),
-    supabase.from('receipts').select('id, merchant_name, total_amount, date, buckets(name), transactions(id, name, amount, currency, categories(name))').eq('month', month).order('date', { ascending: false }),
+    supabase.from('receipts').select('id, merchant_name, total_amount, date, buckets(name)').eq('month', month).order('date', { ascending: false }),
     supabase.from('nbs_rates').select('eur_to_rsd').order('date', { ascending: false }).limit(1).single(),
   ])
 
@@ -94,13 +94,6 @@ export default async function TroskoviPage({ searchParams }: { searchParams: Pro
     totalAmount: r.total_amount,
     date: r.date,
     bucketName: r.buckets?.name ?? '',
-    items: (r.transactions ?? []).map((t: any) => ({
-      id: t.id,
-      name: t.name ?? '',
-      amount: t.amount,
-      currency: t.currency,
-      categoryName: t.categories?.name ?? '',
-    })),
   }))
 
   const debts = (debtsRaw ?? []).map((d: any) => {

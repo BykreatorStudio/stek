@@ -592,7 +592,7 @@ type ExtraExpense = {
 }
 
 type ReceiptItem = { id: string; name: string; amount: number; currency: string; categoryName: string }
-type Receipt = { id: string; merchantName: string; totalAmount: number; date: string; bucketName: string; items: ReceiptItem[] }
+type Receipt = { id: string; merchantName: string; totalAmount: number; date: string; bucketName: string }
 
 export default function TroskoviClient({ recurring, credits, checks, debts, extraExpenses, receipts, month, eurToRsd, monthStart, monthEnd }: {
   recurring: RecurringItem[]; credits: Credit[]; checks: Check[]; debts: Debt[]
@@ -611,6 +611,7 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
   const [confirmDeleteExtra, setConfirmDeleteExtra] = useState<string | null>(null)
   const [editExtra, setEditExtra] = useState<ExtraExpense | null>(null)
   const [openReceiptId, setOpenReceiptId] = useState<string | null>(null)
+  const [openReceiptItems, setOpenReceiptItems] = useState<ReceiptItem[] | null>(null)
   const [confirmDeleteReceipt, setConfirmDeleteReceipt] = useState<string | null>(null)
   const [editAmount, setEditAmount] = useState<RecurringItem | null>(null)
   const openDebt = openDebtId ? debts.find(d => d.id === openDebtId) ?? null : null
@@ -670,10 +671,28 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
     router.refresh()
   }
 
+  async function openReceipt(id: string) {
+    setOpenReceiptId(id)
+    setOpenReceiptItems(null)
+    const { data } = await supabase
+      .from('transactions')
+      .select('id, name, amount, currency, categories(name)')
+      .eq('receipt_id', id)
+      .order('id')
+    setOpenReceiptItems((data ?? []).map((t: any) => ({
+      id: t.id,
+      name: t.name ?? '',
+      amount: t.amount,
+      currency: t.currency,
+      categoryName: t.categories?.name ?? '',
+    })))
+  }
+
   async function deleteReceipt(id: string) {
     await supabase.from('receipts').delete().eq('id', id)
     setConfirmDeleteReceipt(null)
     setOpenReceiptId(null)
+    setOpenReceiptItems(null)
     router.refresh()
   }
 
@@ -961,7 +980,7 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
                 actions={[{ label: 'Obriši', color: 'danger', onClick: () => setConfirmDeleteReceipt(r.id) }]}
               >
                 <div
-                  onClick={() => setOpenReceiptId(r.id)}
+                  onClick={() => openReceipt(r.id)}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', cursor: 'pointer' }}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -969,7 +988,7 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
                       {r.merchantName || 'Fiskalni račun'}
                     </p>
                     <p style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                      {r.bucketName ? `${r.bucketName} · ` : ''}{fmtDate(r.date)} · {r.items.length} {r.items.length === 1 ? 'stavka' : r.items.length < 5 ? 'stavke' : 'stavki'}
+                      {r.bucketName ? `${r.bucketName} · ` : ''}{fmtDate(r.date)}
                     </p>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
@@ -1216,34 +1235,44 @@ export default function TroskoviClient({ recurring, credits, checks, debts, extr
       {openReceiptId && (() => {
         const receipt = receipts.find(r => r.id === openReceiptId)
         if (!receipt) return null
+        const items = openReceiptItems
         return (
-          <Sheet onClose={() => setOpenReceiptId(null)}>
+          <Sheet onClose={() => { setOpenReceiptId(null); setOpenReceiptItems(null) }}>
             <div style={{ padding: '16px 20px 14px', flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
               <p style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-1)', marginBottom: 2 }}>{receipt.merchantName || 'Fiskalni račun'}</p>
               <p style={{ fontSize: 12, color: 'var(--text-3)' }}>{fmtDate(receipt.date)}{receipt.bucketName ? ` · ${receipt.bucketName}` : ''}</p>
             </div>
             <div style={{ overflowY: 'auto', flex: 1, padding: '12px 20px 24px' }}>
-              {receipt.items.map((item, i) => (
-                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 12, marginBottom: 12, borderBottom: i < receipt.items.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                  <div style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
-                    <p style={{ fontSize: 13, color: 'var(--text-1)', wordBreak: 'break-word' }}>{item.name}</p>
-                    {item.categoryName && <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{item.categoryName}</p>}
-                  </div>
-                  <p className="num" style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-2)', flexShrink: 0 }}>
-                    {fmt(item.amount)} <span style={{ fontSize: 11, opacity: 0.6 }}>RSD</span>
-                  </p>
+              {items === null ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}>
+                  <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid var(--border-2)', borderTopColor: 'var(--accent)', animation: 'spin 0.8s linear infinite' }} />
+                  <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
                 </div>
-              ))}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: 4 }}>
-                <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>Ukupno</p>
-                <p className="num" style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-1)' }}>
-                  {fmt(receipt.totalAmount)} <span style={{ fontSize: 11, opacity: 0.6 }}>RSD</span>
-                </p>
-              </div>
+              ) : (
+                <>
+                  {items.map((item, i) => (
+                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 12, marginBottom: 12, borderBottom: i < items.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                      <div style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
+                        <p style={{ fontSize: 13, color: 'var(--text-1)', wordBreak: 'break-word' }}>{item.name}</p>
+                        {item.categoryName && <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{item.categoryName}</p>}
+                      </div>
+                      <p className="num" style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-2)', flexShrink: 0 }}>
+                        {fmt(item.amount)} <span style={{ fontSize: 11, opacity: 0.6 }}>RSD</span>
+                      </p>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: 4 }}>
+                    <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>Ukupno</p>
+                    <p className="num" style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-1)' }}>
+                      {fmt(receipt.totalAmount)} <span style={{ fontSize: 11, opacity: 0.6 }}>RSD</span>
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
             <div style={{ padding: '0 20px 24px', flexShrink: 0 }}>
               <button
-                onClick={() => { setOpenReceiptId(null); setConfirmDeleteReceipt(receipt.id) }}
+                onClick={() => { setOpenReceiptId(null); setOpenReceiptItems(null); setConfirmDeleteReceipt(receipt.id) }}
                 style={{ width: '100%', padding: '12px 0', borderRadius: 12, fontSize: 14, fontWeight: 500, border: 'none', background: 'var(--red-light)', color: 'var(--red)', cursor: 'pointer' }}
               >
                 Obriši račun
