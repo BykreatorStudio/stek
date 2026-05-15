@@ -58,6 +58,7 @@ export default async function AnalitikaPage() {
     const rashodi = mTxs.filter((t: any) => t.type === 'rashod' && !t.skip_accounting).reduce((s: number, t: any) => s + toRSD(t.amount, t.currency), 0)
 
     const catBreakdown: Record<string, number> = {}
+    const incomeCatBreakdown: Record<string, number> = {}
     const bucketBreakdown: Record<string, number> = {}
     const memberBreakdown: Record<string, { prihodi: number; rashodi: number }> = {}
 
@@ -73,6 +74,13 @@ export default async function AnalitikaPage() {
         catBreakdown['Ostalo'] = (catBreakdown['Ostalo'] ?? 0) + amount
         bucketBreakdown['Ostalo'] = (bucketBreakdown['Ostalo'] ?? 0) + amount
       }
+    })
+
+    mTxs.filter((t: any) => t.type === 'prihod' && !t.skip_accounting).forEach((t: any) => {
+      const amount = toRSD(t.amount, t.currency)
+      const cat = t.category_id ? catMap.get(t.category_id) : null
+      const catName = cat?.name ?? 'Ostalo'
+      incomeCatBreakdown[catName] = (incomeCatBreakdown[catName] ?? 0) + amount
     })
 
     mTxs.forEach((t: any) => {
@@ -91,6 +99,7 @@ export default async function AnalitikaPage() {
       rashodi,
       bilans: prihodi - rashodi,
       catBreakdown,
+      incomeCatBreakdown,
       bucketBreakdown,
       memberBreakdown,
     }

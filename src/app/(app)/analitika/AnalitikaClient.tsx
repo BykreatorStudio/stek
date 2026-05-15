@@ -17,6 +17,7 @@ type MonthData = {
   rashodi: number
   bilans: number
   catBreakdown: Record<string, number>
+  incomeCatBreakdown: Record<string, number>
   bucketBreakdown: Record<string, number>
   memberBreakdown: Record<string, { prihodi: number; rashodi: number }>
 }
@@ -30,6 +31,7 @@ const PERIODS = [
 ]
 
 const COLORS = ['#C8FF31', '#5a9700', '#38bdf8', '#818cf8', '#f472b6', '#fb923c', '#a78bfa', '#34d399']
+const RED_COLORS = ['#f87171', '#ef4444', '#fca5a5', '#dc2626', '#fecaca', '#b91c1c', '#fed7d7', '#991b1b']
 
 function fmt(n: number) {
   if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(1).replace('.', ',') + 'M'
@@ -169,7 +171,7 @@ export default function AnalitikaClient({
     } finally {
       setInsightsLoading(false)
     }
-  }, [])
+  }, [householdId])
 
   const slice = useMemo(() => monthlyData.slice(-period), [monthlyData, period])
 
@@ -184,8 +186,9 @@ export default function AnalitikaClient({
 
   const avgBilans = avgPrihodi - avgRashodi
   const hasData = slice.some(m => m.prihodi > 0 || m.rashodi > 0)
+  const hasRashodi = slice.some(m => m.rashodi > 0)
+  const hasPrihodi = slice.some(m => m.prihodi > 0)
 
-  // Aggregate categories for period
   const categoryData = useMemo(() => {
     const totals: Record<string, number> = {}
     slice.forEach(m => {
@@ -199,7 +202,19 @@ export default function AnalitikaClient({
       .sort((a, b) => b.value - a.value)
   }, [slice])
 
-  // Aggregate buckets for period
+  const incomeCategoryData = useMemo(() => {
+    const totals: Record<string, number> = {}
+    slice.forEach(m => {
+      Object.entries(m.incomeCatBreakdown ?? {}).forEach(([name, val]) => {
+        totals[name] = (totals[name] ?? 0) + val
+      })
+    })
+    const total = Object.values(totals).reduce((s, v) => s + v, 0)
+    return Object.entries(totals)
+      .map(([name, value]) => ({ name, value, pct: total > 0 ? Math.round((value / total) * 100) : 0 }))
+      .sort((a, b) => b.value - a.value)
+  }, [slice])
+
   const bucketData = useMemo(() => {
     const totals: Record<string, number> = {}
     slice.forEach(m => {
@@ -259,7 +274,220 @@ export default function AnalitikaClient({
 
       <div style={{ maxWidth: 520, margin: '0 auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-        {/* AI Insights */}
+        {/* Stat cards */}
+        <div style={{ display: 'flex', gap: 10 }}>
+          <StatCard label="RASH. / MES." value={avgRashodi > 0 ? fmt(avgRashodi) : '—'} color="var(--red)" sub={avgRashodi > 0 ? 'RSD prosek' : undefined} />
+          <StatCard label="PRIH. / MES." value={avgPrihodi > 0 ? fmt(avgPrihodi) : '—'} color="var(--accent-dark)" sub={avgPrihodi > 0 ? 'RSD prosek' : undefined} />
+          <StatCard
+            label="BILANS / MES."
+            value={avgBilans !== 0 ? (avgBilans > 0 ? '+' : '') + fmt(avgBilans) : '—'}
+            color={avgBilans > 0 ? 'var(--accent-dark)' : avgBilans < 0 ? 'var(--red)' : undefined}
+            sub={avgBilans !== 0 ? 'RSD prosek' : undefined}
+          />
+        </div>
+
+        {/* Rashodi po mesecu */}
+        {hasRashodi && (
+          <ChartCard title="Rashodi po mesecu">
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={slice} barCategoryGap="35%">
+                <CartesianGrid vertical={false} stroke="var(--border)" />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={fmt} tick={{ fontSize: 10, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} width={34} />
+                <Tooltip content={<CustomTooltip labelMap={{ rashodi: 'Rashodi' }} />} cursor={{ fill: 'rgba(0,0,0,0.04)', radius: 6 }} />
+                <Bar dataKey="rashodi" fill="#f87171" radius={[5, 5, 0, 0]} maxBarSize={32} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        )}
+
+        {/* Rashodi po kategoriji */}
+        {categoryData.length > 0 && (
+          <ChartCard title="Rashodi po kategoriji" noPad>
+            <div style={{ display: 'flex', gap: 0, padding: '0 16px 16px' }}>
+              <div style={{ flexShrink: 0, marginRight: 8 }}>
+                <ResponsiveContainer width={130} height={130}>
+                  <PieChart>
+                    <Pie data={categoryData} cx="50%" cy="50%" innerRadius={38} outerRadius={62} dataKey="value" strokeWidth={0}>
+                      {categoryData.map((_, i) => <Cell key={i} fill={RED_COLORS[i % RED_COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip content={<PieTooltip />} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center' }}>
+                {categoryData.slice(0, 5).map((c, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ColorDot color={RED_COLORS[i % RED_COLORS.length]} />
+                    <p style={{ fontSize: 12, color: 'var(--text-2)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</p>
+                    <p className="num" style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0 }}>{c.pct}%</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{ borderTop: '1px solid var(--border)' }}>
+              {categoryData.map((c, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderBottom: i < categoryData.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <p style={{ width: 18, fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textAlign: 'center', flexShrink: 0 }}>{i + 1}</p>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</p>
+                      <p className="num" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', flexShrink: 0, marginLeft: 8 }}>{fmt(c.value)}</p>
+                    </div>
+                    <div style={{ height: 3, borderRadius: 3, background: 'var(--border-2)' }}>
+                      <div style={{ height: '100%', borderRadius: 3, background: RED_COLORS[i % RED_COLORS.length], width: `${c.pct}%` }} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ChartCard>
+        )}
+
+        {/* Rashodi po grupi */}
+        {bucketData.length > 1 && (
+          <ChartCard title="Rashodi po grupi" noPad>
+            <div style={{ borderTop: '1px solid var(--border)' }}>
+              {bucketData.map((b, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: i < bucketData.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <div style={{ width: 10, height: 10, borderRadius: 3, flexShrink: 0, background: RED_COLORS[i % RED_COLORS.length] }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                      <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)' }}>{b.name}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <p className="num" style={{ fontSize: 13, color: 'var(--text-3)' }}>{b.pct}%</p>
+                        <p className="num" style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{fmt(b.value)}</p>
+                      </div>
+                    </div>
+                    <div style={{ height: 4, borderRadius: 4, background: 'var(--border-2)' }}>
+                      <div style={{ height: '100%', borderRadius: 4, background: RED_COLORS[i % RED_COLORS.length], width: `${b.pct}%` }} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ChartCard>
+        )}
+
+        {/* Prihodi po mesecu */}
+        {hasPrihodi && (
+          <ChartCard title="Prihodi po mesecu">
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={slice} barCategoryGap="35%">
+                <CartesianGrid vertical={false} stroke="var(--border)" />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={fmt} tick={{ fontSize: 10, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} width={34} />
+                <Tooltip content={<CustomTooltip labelMap={{ prihodi: 'Prihodi' }} />} cursor={{ fill: 'rgba(0,0,0,0.04)', radius: 6 }} />
+                <Bar dataKey="prihodi" fill="#C8FF31" radius={[5, 5, 0, 0]} maxBarSize={32} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        )}
+
+        {/* Prihodi po kategoriji */}
+        {incomeCategoryData.length > 1 && (
+          <ChartCard title="Prihodi po kategoriji" noPad>
+            <div style={{ borderTop: '1px solid var(--border)' }}>
+              {incomeCategoryData.map((c, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderBottom: i < incomeCategoryData.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <p style={{ width: 18, fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textAlign: 'center', flexShrink: 0 }}>{i + 1}</p>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</p>
+                      <p className="num" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', flexShrink: 0, marginLeft: 8 }}>{fmt(c.value)}</p>
+                    </div>
+                    <div style={{ height: 3, borderRadius: 3, background: 'var(--border-2)' }}>
+                      <div style={{ height: '100%', borderRadius: 3, background: COLORS[i % COLORS.length], width: `${c.pct}%` }} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ChartCard>
+        )}
+
+        {/* Bilans trend */}
+        {hasData && (
+          <ChartCard title="Trend bilansa">
+            <ResponsiveContainer width="100%" height={180}>
+              <AreaChart data={slice}>
+                <defs>
+                  <linearGradient id="bilansPos" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#C8FF31" stopOpacity={0.22} />
+                    <stop offset="95%" stopColor="#C8FF31" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} stroke="var(--border)" />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={fmt} tick={{ fontSize: 10, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} width={34} />
+                <Tooltip content={<CustomTooltip labelMap={{ bilans: 'Bilans' }} />} />
+                <Area type="monotone" dataKey="bilans" stroke="#C8FF31" strokeWidth={2.5} fill="url(#bilansPos)"
+                  dot={{ fill: '#C8FF31', strokeWidth: 0, r: 3 }} activeDot={{ r: 5, fill: '#C8FF31', strokeWidth: 0 }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        )}
+
+        {/* Po članovima */}
+        {memberData.length > 0 && (
+          <ChartCard title="Po članovima" noPad>
+            <div style={{ borderTop: '1px solid var(--border)' }}>
+              {memberData.map((m, i) => {
+                const total = m.prihodi + m.rashodi
+                return (
+                  <div key={m.id} style={{ padding: '14px 16px', borderBottom: i < memberData.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                    <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', marginBottom: 10 }}>{m.name}</p>
+                    {m.prihodi > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                        <p style={{ fontSize: 11, color: 'var(--text-3)', width: 52, flexShrink: 0 }}>Prihodi</p>
+                        <div style={{ flex: 1, height: 4, borderRadius: 4, background: 'var(--border-2)' }}>
+                          <div style={{ height: '100%', borderRadius: 4, background: '#C8FF31', width: `${total > 0 ? Math.round((m.prihodi / total) * 100) : 0}%` }} />
+                        </div>
+                        <p className="num" style={{ fontSize: 12, color: 'var(--accent-dark)', flexShrink: 0, minWidth: 60, textAlign: 'right' }}>+{fmt(m.prihodi)}</p>
+                      </div>
+                    )}
+                    {m.rashodi > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <p style={{ fontSize: 11, color: 'var(--text-3)', width: 52, flexShrink: 0 }}>Rashodi</p>
+                        <div style={{ flex: 1, height: 4, borderRadius: 4, background: 'var(--border-2)' }}>
+                          <div style={{ height: '100%', borderRadius: 4, background: '#f87171', width: `${total > 0 ? Math.round((m.rashodi / total) * 100) : 0}%` }} />
+                        </div>
+                        <p className="num" style={{ fontSize: 12, color: 'var(--red)', flexShrink: 0, minWidth: 60, textAlign: 'right' }}>-{fmt(m.rashodi)}</p>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </ChartCard>
+        )}
+
+        {/* Štednja */}
+        {hasSavings && (
+          <ChartCard title="Rast štednje">
+            <ResponsiveContainer width="100%" height={160}>
+              <AreaChart data={savingsHistory}>
+                <defs>
+                  <linearGradient id="savGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#C8FF31" stopOpacity={0.28} />
+                    <stop offset="95%" stopColor="#C8FF31" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} stroke="var(--border)" />
+                <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                <YAxis tickFormatter={fmt} tick={{ fontSize: 10, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} width={34} />
+                <Tooltip content={<CustomTooltip labelMap={{ value: 'Štednja' }} />} />
+                <Area type="monotone" dataKey="value" stroke="#C8FF31" strokeWidth={2.5} fill="url(#savGrad)" dot={false} activeDot={{ r: 4, fill: '#C8FF31', strokeWidth: 0 }} />
+              </AreaChart>
+            </ResponsiveContainer>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, padding: '12px 16px', background: 'var(--accent-light)', borderRadius: 12 }}>
+              <p style={{ fontSize: 13, color: 'var(--accent-dark)', fontWeight: 500 }}>Ukupna štednja</p>
+              <p className="num" style={{ fontSize: 15, fontWeight: 600, color: 'var(--accent-dark)' }}>{fmtFull(totalSavings)}</p>
+            </div>
+          </ChartCard>
+        )}
+
+        {/* AI uvidi */}
         <div style={{ background: 'var(--card)', borderRadius: 20, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.03)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 16px' }}>
             <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>AI uvidi</p>
@@ -324,192 +552,6 @@ export default function AnalitikaClient({
             </>
           )}
         </div>
-
-        {/* Stat cards */}
-        <div style={{ display: 'flex', gap: 10 }}>
-          <StatCard label="PRIH. / MES." value={avgPrihodi > 0 ? fmt(avgPrihodi) : '—'} color="var(--accent)" sub={avgPrihodi > 0 ? 'RSD prosek' : undefined} />
-          <StatCard label="RASH. / MES." value={avgRashodi > 0 ? fmt(avgRashodi) : '—'} color="var(--red)" sub={avgRashodi > 0 ? 'RSD prosek' : undefined} />
-          <StatCard
-            label="BILANS / MES."
-            value={avgBilans !== 0 ? (avgBilans > 0 ? '+' : '') + fmt(avgBilans) : '—'}
-            color={avgBilans > 0 ? 'var(--accent)' : avgBilans < 0 ? 'var(--red)' : undefined}
-            sub={avgBilans !== 0 ? 'RSD prosek' : undefined}
-          />
-        </div>
-
-        {/* Bar: Prihodi & Rashodi */}
-        <ChartCard title="Prihodi & Rashodi po mesecu">
-          {hasData ? (
-            <>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={slice} barGap={3} barCategoryGap="32%">
-                  <CartesianGrid vertical={false} stroke="var(--border)" />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={fmt} tick={{ fontSize: 10, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} width={34} />
-                  <Tooltip content={<CustomTooltip labelMap={{ prihodi: 'Prihodi', rashodi: 'Rashodi' }} />} cursor={{ fill: 'rgba(0,0,0,0.04)', radius: 6 }} />
-                  <Bar dataKey="prihodi" fill="#C8FF31" radius={[5, 5, 0, 0]} maxBarSize={26} />
-                  <Bar dataKey="rashodi" fill="#f87171" radius={[5, 5, 0, 0]} maxBarSize={26} />
-                </BarChart>
-              </ResponsiveContainer>
-              <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginTop: 4 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><ColorDot color="#C8FF31" /><p style={{ fontSize: 12, color: 'var(--text-3)' }}>Prihodi</p></div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><ColorDot color="#f87171" /><p style={{ fontSize: 12, color: 'var(--text-3)' }}>Rashodi</p></div>
-              </div>
-            </>
-          ) : <EmptyChart />}
-        </ChartCard>
-
-        {/* Area: Bilans trend */}
-        <ChartCard title="Trend bilansa">
-          {hasData ? (
-            <ResponsiveContainer width="100%" height={180}>
-              <AreaChart data={slice}>
-                <defs>
-                  <linearGradient id="bilansPos" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#C8FF31" stopOpacity={0.22} />
-                    <stop offset="95%" stopColor="#C8FF31" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid vertical={false} stroke="var(--border)" />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={fmt} tick={{ fontSize: 10, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} width={34} />
-                <Tooltip content={<CustomTooltip labelMap={{ bilans: 'Bilans' }} />} />
-                <Area type="monotone" dataKey="bilans" stroke="#C8FF31" strokeWidth={2.5} fill="url(#bilansPos)"
-                  dot={{ fill: '#C8FF31', strokeWidth: 0, r: 3 }} activeDot={{ r: 5, fill: '#C8FF31', strokeWidth: 0 }} />
-              </AreaChart>
-            </ResponsiveContainer>
-          ) : <EmptyChart />}
-        </ChartCard>
-
-        {/* Kategorije */}
-        {categoryData.length > 0 && (
-          <ChartCard title="Rashodi po kategoriji" noPad>
-            <div style={{ display: 'flex', gap: 0, padding: '0 16px 16px' }}>
-              {/* Donut */}
-              <div style={{ flexShrink: 0, marginRight: 8 }}>
-                <ResponsiveContainer width={130} height={130}>
-                  <PieChart>
-                    <Pie data={categoryData} cx="50%" cy="50%" innerRadius={38} outerRadius={62} dataKey="value" strokeWidth={0}>
-                      {categoryData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip content={<PieTooltip />} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              {/* List */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center' }}>
-                {categoryData.slice(0, 5).map((c, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <ColorDot color={COLORS[i % COLORS.length]} />
-                    <p style={{ fontSize: 12, color: 'var(--text-2)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</p>
-                    <p className="num" style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0 }}>{c.pct}%</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {/* Ranked list — sve kategorije */}
-            <div style={{ borderTop: '1px solid var(--border)' }}>
-              {categoryData.map((c, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderBottom: i < categoryData.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                  <p style={{ width: 18, fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textAlign: 'center', flexShrink: 0 }}>{i + 1}</p>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                      <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</p>
-                      <p className="num" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', flexShrink: 0, marginLeft: 8 }}>{fmt(c.value)}</p>
-                    </div>
-                    <div style={{ height: 3, borderRadius: 3, background: 'var(--border-2)' }}>
-                      <div style={{ height: '100%', borderRadius: 3, background: COLORS[i % COLORS.length], width: `${c.pct}%` }} />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </ChartCard>
-        )}
-
-        {/* Grupe */}
-        {bucketData.length > 1 && (
-          <ChartCard title="Rashodi po grupi" noPad>
-            <div style={{ borderTop: '1px solid var(--border)' }}>
-              {bucketData.map((b, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: i < bucketData.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                  <div style={{ width: 10, height: 10, borderRadius: 3, flexShrink: 0, background: COLORS[i % COLORS.length] }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                      <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)' }}>{b.name}</p>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <p className="num" style={{ fontSize: 13, color: 'var(--text-3)' }}>{b.pct}%</p>
-                        <p className="num" style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{fmt(b.value)}</p>
-                      </div>
-                    </div>
-                    <div style={{ height: 4, borderRadius: 4, background: 'var(--border-2)' }}>
-                      <div style={{ height: '100%', borderRadius: 4, background: COLORS[i % COLORS.length], width: `${b.pct}%` }} />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </ChartCard>
-        )}
-
-        {/* Po članovima */}
-        {memberData.length > 0 && (
-          <ChartCard title="Po članovima" noPad>
-            <div style={{ borderTop: '1px solid var(--border)' }}>
-              {memberData.map((m, i) => {
-                const total = m.prihodi + m.rashodi
-                return (
-                  <div key={m.id} style={{ padding: '14px 16px', borderBottom: i < memberData.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                    <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', marginBottom: 10 }}>{m.name}</p>
-                    {m.prihodi > 0 && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                        <p style={{ fontSize: 11, color: 'var(--text-3)', width: 52, flexShrink: 0 }}>Prihodi</p>
-                        <div style={{ flex: 1, height: 4, borderRadius: 4, background: 'var(--border-2)' }}>
-                          <div style={{ height: '100%', borderRadius: 4, background: '#C8FF31', width: `${total > 0 ? Math.round((m.prihodi / total) * 100) : 0}%` }} />
-                        </div>
-                        <p className="num" style={{ fontSize: 12, color: 'var(--accent)', flexShrink: 0, minWidth: 60, textAlign: 'right' }}>+{fmt(m.prihodi)}</p>
-                      </div>
-                    )}
-                    {m.rashodi > 0 && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <p style={{ fontSize: 11, color: 'var(--text-3)', width: 52, flexShrink: 0 }}>Rashodi</p>
-                        <div style={{ flex: 1, height: 4, borderRadius: 4, background: 'var(--border-2)' }}>
-                          <div style={{ height: '100%', borderRadius: 4, background: '#f87171', width: `${total > 0 ? Math.round((m.rashodi / total) * 100) : 0}%` }} />
-                        </div>
-                        <p className="num" style={{ fontSize: 12, color: 'var(--red)', flexShrink: 0, minWidth: 60, textAlign: 'right' }}>-{fmt(m.rashodi)}</p>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </ChartCard>
-        )}
-
-        {/* Štednja */}
-        {hasSavings && (
-          <ChartCard title="Rast štednje">
-            <ResponsiveContainer width="100%" height={160}>
-              <AreaChart data={savingsHistory}>
-                <defs>
-                  <linearGradient id="savGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#C8FF31" stopOpacity={0.28} />
-                    <stop offset="95%" stopColor="#C8FF31" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid vertical={false} stroke="var(--border)" />
-                <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                <YAxis tickFormatter={fmt} tick={{ fontSize: 10, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} width={34} />
-                <Tooltip content={<CustomTooltip labelMap={{ value: 'Štednja' }} />} />
-                <Area type="monotone" dataKey="value" stroke="#C8FF31" strokeWidth={2.5} fill="url(#savGrad)" dot={false} activeDot={{ r: 4, fill: '#C8FF31', strokeWidth: 0 }} />
-              </AreaChart>
-            </ResponsiveContainer>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, padding: '12px 16px', background: 'var(--accent-light)', borderRadius: 12 }}>
-              <p style={{ fontSize: 13, color: 'var(--accent-dark)', fontWeight: 500 }}>Ukupna štednja</p>
-              <p className="num" style={{ fontSize: 15, fontWeight: 600, color: 'var(--accent-dark)' }}>{fmtFull(totalSavings)}</p>
-            </div>
-          </ChartCard>
-        )}
 
         {!hasData && (
           <div style={{ background: 'var(--card)', borderRadius: 20, padding: '40px 20px', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
