@@ -1,11 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area, PieChart, Pie, Cell,
 } from 'recharts'
+
+type Insight = { tip: 'upozorenje' | 'savet' | 'pozitivno'; naslov: string; opis: string }
 
 type MonthData = {
   month: string
@@ -93,6 +95,37 @@ function EmptyChart() {
   )
 }
 
+const INSIGHT_COLORS: Record<string, string> = {
+  upozorenje: '#f87171',
+  savet: '#60a5fa',
+  pozitivno: '#C8FF31',
+}
+
+function InsightIcon({ tip }: { tip: string }) {
+  if (tip === 'upozorenje') return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>
+  )
+  if (tip === 'pozitivno') return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C8FF31" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+  )
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+  )
+}
+
+function fmtGenerated(iso: string) {
+  const d = new Date(iso)
+  return d.toLocaleDateString('sr-Latn-RS', { day: 'numeric', month: 'long' }) +
+    ' u ' + d.toLocaleTimeString('sr-Latn-RS', { hour: '2-digit', minute: '2-digit' })
+}
+
 export default function AnalitikaClient({
   monthlyData,
   savingsHistory,
@@ -105,6 +138,26 @@ export default function AnalitikaClient({
   members: Member[]
 }) {
   const [period, setPeriod] = useState(6)
+  const [insights, setInsights] = useState<Insight[]>([])
+  const [insightsLoading, setInsightsLoading] = useState(false)
+  const [insightsError, setInsightsError] = useState('')
+  const [generatedAt, setGeneratedAt] = useState('')
+
+  const fetchInsights = useCallback(async () => {
+    setInsightsLoading(true)
+    setInsightsError('')
+    try {
+      const res = await fetch('/api/generate-insights', { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) { setInsightsError(json.error ?? 'Greška'); return }
+      setInsights(json.insights)
+      setGeneratedAt(json.generatedAt)
+    } catch {
+      setInsightsError('Nije moguće učitati analizu')
+    } finally {
+      setInsightsLoading(false)
+    }
+  }, [])
 
   const slice = useMemo(() => monthlyData.slice(-period), [monthlyData, period])
 
@@ -193,6 +246,76 @@ export default function AnalitikaClient({
       </div>
 
       <div style={{ maxWidth: 520, margin: '0 auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+        {/* AI Insights */}
+        <div style={{ background: 'var(--card)', borderRadius: 20, padding: '18px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.03)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: insights.length > 0 ? 14 : 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-1)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2a7 7 0 017 7c0 2.62-1.44 4.92-3.58 6.16L15 17H9l-.42-1.84A7 7 0 015 9a7 7 0 017-7z"/>
+                <line x1="9" y1="21" x2="15" y2="21"/><line x1="9" y1="17" x2="15" y2="17"/>
+              </svg>
+              <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>AI uvidi</p>
+            </div>
+            {insights.length > 0 && !insightsLoading && (
+              <button onClick={fetchInsights} style={{ fontSize: 12, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', fontFamily: 'inherit' }}>
+                Osveži
+              </button>
+            )}
+          </div>
+
+          {insightsLoading && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '20px 0' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 1s linear infinite' }}>
+                <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeOpacity="0.2"/>
+                <path d="M21 12a9 9 0 00-9-9"/>
+              </svg>
+              <p style={{ fontSize: 13, color: 'var(--text-3)' }}>Analiziram...</p>
+            </div>
+          )}
+
+          {!insightsLoading && insightsError && (
+            <div style={{ padding: '12px 0 4px' }}>
+              <p style={{ fontSize: 13, color: '#f87171' }}>{insightsError}</p>
+              <button onClick={fetchInsights} style={{ marginTop: 10, fontSize: 13, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit', textDecoration: 'underline' }}>
+                Pokušaj ponovo
+              </button>
+            </div>
+          )}
+
+          {!insightsLoading && insights.length === 0 && !insightsError && (
+            <div style={{ paddingTop: 14 }}>
+              <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 14 }}>
+                Analiziraj prihode, rashode i kredite za konkretne savete.
+              </p>
+              <button onClick={fetchInsights} className="btn-primary" style={{ width: '100%' }}>
+                Analiziraj
+              </button>
+            </div>
+          )}
+
+          {!insightsLoading && insights.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {insights.map((ins, i) => (
+                <div key={i} style={{
+                  borderLeft: `3px solid ${INSIGHT_COLORS[ins.tip] ?? '#60a5fa'}`,
+                  paddingLeft: 12, paddingTop: 2, paddingBottom: 2,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    <InsightIcon tip={ins.tip} />
+                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{ins.naslov}</p>
+                  </div>
+                  <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5 }}>{ins.opis}</p>
+                </div>
+              ))}
+              {generatedAt && (
+                <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+                  Generisano {fmtGenerated(generatedAt)}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Stat cards */}
         <div style={{ display: 'flex', gap: 10 }}>
