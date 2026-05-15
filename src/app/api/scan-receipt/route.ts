@@ -97,27 +97,33 @@ async function tryJsonApi(url: string): Promise<{ items: ReceiptItem[]; merchant
   const result = data?.invoiceResult ?? data?.InvoiceResult ?? data
   const merchantName = result?.merchantName ?? result?.MerchantName ?? result?.companyName ?? ''
 
-  if (Array.isArray(result?.items) && result.items.length > 0) {
-    const items = result.items
-      .filter((i: any) => i.name && Number(i.total ?? i.amount) > 0)
+  const rawItems = result?.items ?? result?.Items ?? result?.stavke ?? result?.Stavke ?? null
+  const firstItemDump = rawItems?.[0] ? JSON.stringify(rawItems[0]).slice(0, 300) : null
+
+  if (Array.isArray(rawItems) && rawItems.length > 0) {
+    const items = rawItems
+      .filter((i: any) => Number(i.total ?? i.Total ?? i.ukupno ?? i.Ukupno ?? i.amount ?? i.Amount) > 0)
       .map((i: any) => ({
-        name: String(i.name ?? i.Name).replace(/\s+/g, ' ').trim(),
-        quantity: Math.round((Number(i.quantity ?? i.Quantity) || 1) * 1000) / 1000,
-        unit: i.unit ?? i.Unit ?? 'KOM',
-        unitPrice: Math.round((Number(i.unitPrice ?? i.UnitPrice ?? i.price) || 0) * 100) / 100,
-        total: Math.round((Number(i.total ?? i.Total ?? i.amount) || 0) * 100) / 100,
+        name: String(
+          i.name ?? i.Name ?? i.naziv ?? i.Naziv ?? i.description ?? i.Description ??
+          i.itemName ?? i.articleName ?? i.goodsName ?? i.productName ?? i.roba ?? 'Artikal'
+        ).replace(/\s+/g, ' ').trim(),
+        quantity: Math.round((Number(i.quantity ?? i.Quantity ?? i.kolicina ?? i.Kolicina) || 1) * 1000) / 1000,
+        unit: i.unit ?? i.Unit ?? i.jedinica ?? 'KOM',
+        unitPrice: Math.round((Number(i.unitPrice ?? i.UnitPrice ?? i.jedinicnaCena ?? i.price ?? i.Price) || 0) * 100) / 100,
+        total: Math.round((Number(i.total ?? i.Total ?? i.ukupno ?? i.Ukupno ?? i.amount ?? i.Amount) || 0) * 100) / 100,
       }))
-    return { items, merchantName, debug: debug + ` structured_items=${items.length}` }
+    return { items, merchantName, debug: debug + ` structured items=${items.length} first=${firstItemDump}` }
   }
 
   // Fall back to journal parsing
   const journal = result?.journal ?? result?.Journal ?? data?.journal ?? ''
   if (journal) {
     const items = parseJournal(journal)
-    return { items, merchantName, debug: debug + ` journal_parsed items=${items.length} journal_len=${journal.length}` }
+    return { items, merchantName, debug: debug + ` journal_parsed items=${items.length} first=${firstItemDump}` }
   }
 
-  return { items: [], merchantName, debug: debug + ` no_items keys=${Object.keys(data ?? {}).join(',')}` }
+  return { items: [], merchantName, debug: debug + ` no_items keys=${Object.keys(data ?? {}).join(',')} first=${firstItemDump}` }
 }
 
 // Strategy 2: HTML page + /specifications POST (original approach)
