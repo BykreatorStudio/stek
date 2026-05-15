@@ -127,7 +127,7 @@ function CategoryPicker({ categories, value, onChange, onAdd }: {
 export default function QrScannerForm({ onClose }: { onClose: () => void }) {
   const [view, setView] = useState<View>('scanning')
   const [error, setError] = useState('')
-  const [debugInfo, setDebugInfo] = useState('')
+
   const [items, setItems] = useState<ScannedItem[]>([])
   const [merchantName, setMerchantName] = useState('')
   const [bucketId, setBucketId] = useState('')
@@ -171,7 +171,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
         body: JSON.stringify({ url: qrUrl }),
       })
       const data = await res.json()
-      if (data._debug) setDebugInfo(data._debug)
+
       if (!res.ok || data.error) {
         setError(data.error || 'Greška pri čitanju računa')
         setView('error')
@@ -442,7 +442,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
           </div>
           <div style={{ padding: '8px 20px 12px', flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
             <p style={{ fontSize: 17, fontWeight: 500, color: 'var(--text-1)', marginBottom: 2 }}>{merchantName || 'Fiskalni račun'}</p>
-            {debugInfo && <p style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 4, wordBreak: 'break-all' }}>DEBUG: {debugInfo}</p>}
+
             <p style={{ fontSize: 12, color: 'var(--text-3)' }}>{items.length} stavki · {fmt(total)} RSD</p>
           </div>
           <div style={{ padding: '12px 20px', flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
