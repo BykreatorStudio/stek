@@ -396,7 +396,7 @@ export default function AnalitikaClient({
               </div>
               {/* List */}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center' }}>
-                {categoryData.slice(0, 6).map((c, i) => (
+                {categoryData.slice(0, 5).map((c, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <ColorDot color={COLORS[i % COLORS.length]} />
                     <p style={{ fontSize: 12, color: 'var(--text-2)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</p>
@@ -405,10 +405,10 @@ export default function AnalitikaClient({
                 ))}
               </div>
             </div>
-            {/* Ranked list */}
+            {/* Ranked list — sve kategorije */}
             <div style={{ borderTop: '1px solid var(--border)' }}>
-              {categoryData.slice(0, 8).map((c, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderBottom: i < Math.min(categoryData.length, 8) - 1 ? '1px solid var(--border)' : 'none' }}>
+              {categoryData.map((c, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', borderBottom: i < categoryData.length - 1 ? '1px solid var(--border)' : 'none' }}>
                   <p style={{ width: 18, fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textAlign: 'center', flexShrink: 0 }}>{i + 1}</p>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>

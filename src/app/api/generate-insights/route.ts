@@ -113,33 +113,34 @@ export async function POST() {
   const context = {
     danas: now.toISOString().split('T')[0],
     danUMesecu: dayOfMonth,
-    danaDoKrajaAMeseca: daysLeft,
+    danaDoKrajaaMeseca: daysLeft,
     tekuciMesec: {
       prihodi: Math.round(prihodi),
       rashodi: Math.round(rashodi),
-      rashodiProjekcija,
-      prosecniMesecniRashodi: avgMonthlyRashodi,
+      ocekivaniRashodiDoKraja: rashodiProjekcija,
+      prosekRashodaProteklihMeseci: avgMonthlyRashodi,
     },
-    kategorijePorednjeVsProsek,
+    kategorijePoredjeneVsProsek: kategorijePorednjeVsProsek,
     krediti,
     ukupnaStednja,
   }
 
-  const prompt = `Ti si finansijski savetnik za srpsko domacinstvo. Analiziras finansijske podatke i dajes konkretne savete na srpskom jeziku.
+  const prompt = `Ti si finansijski savetnik za srpsko domacinstvo. Analiziras finansijske podatke i dajes konkretne, korisne savete.
 
-Na osnovu podataka ispod, generisi izmedju 3 i 5 finansijskih uvida. Pravila:
-- Svaki uvid mora imati tacne iznose u RSD iz dostavljenih podataka
-- Direktan i prakticno upotrebljiv savet, bez opštih fraza
-- Na srpskom jeziku, latinica
-- Ako nema dovoljno podataka za odredjeni uvid, preskoči ga
-- Ne izmisljaj podatke koji nisu u dostavljenom JSON-u
+Jezik: srpski, latinica. Pisati prirodno kao sto bi govorio pametan prijatelj koji se razume u finansije — bez stranih reci, bez birokratskog jezika. Primeri loseg pisanja: "projicirana potrosnja", "alokacija sredstava", "optimizacija". Primeri dobrog pisanja: "ocekivana potrosnja do kraja meseca", "slobodan novac", "rata kredita".
+
+Na osnovu podataka ispod, generisi tacno 3 do 5 uvida. Pravila:
+- Koristiti tacne iznose u dinarima iz podataka (pisati "12.500 dinara" ne "12500 RSD")
+- Konkretan savet — sta tacno uraditi, ne opstosti
+- Ako nema podataka za odredjeni uvid, preskoci ga
+- Ne izmisljaj podatke koji nisu u JSON-u
 
 Vrati SAMO JSON niz, bez ikakvog teksta pre ili posle:
 [
   {
     "tip": "upozorenje" | "savet" | "pozitivno",
-    "naslov": "Kratki naslov do 7 reci",
-    "opis": "Konkretan opis sa tacknim brojevima i jasnom preporukom. Maksimalno 3 recenice."
+    "naslov": "Kratki naslov, najvise 6 reci, bez zareza",
+    "opis": "Konkretan opis sa tacknim brojevima i jasnom preporukom. Najvise 2-3 recenice. Bez uvoda tipa 'Primetili smo da'."
   }
 ]
 
