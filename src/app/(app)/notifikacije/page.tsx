@@ -83,12 +83,29 @@ function typeIcon(type: string): IconDef {
   return icons[type] ?? { viewBox: '0 0 24 24', paths: ['M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 00-5-5.917V4a1 1 0 10-2 0v1.083A6 6 0 006 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9'], color: 'var(--text-2)', bg: 'var(--bg-subtle)' }
 }
 
+type Tab = 'sve' | 'rezimei' | 'racuni' | 'ai'
+
+const TABS: { id: Tab; label: string; types: string[] | null }[] = [
+  { id: 'sve',     label: 'Sve',      types: null },
+  { id: 'rezimei', label: 'Rezimei',  types: ['rezime_nedeljni', 'rezime_mesecni', 'rezime_kvartalni', 'rezime_godisnji'] },
+  { id: 'racuni',  label: 'Računi',   types: ['racun_upcoming', 'racun_overdue', 'racun_placen'] },
+  { id: 'ai',      label: 'AI uvidi', types: ['ai_uvidi'] },
+]
+
+const REZIME_ITEMS = [
+  { type: 'rezime_nedeljni',  label: 'Nedeljni rezime',  schedule: 'Svake nedelje u 17:00' },
+  { type: 'rezime_mesecni',   label: 'Mesečni rezime',   schedule: 'Prvog u mesecu' },
+  { type: 'rezime_kvartalni', label: 'Kvartal',           schedule: 'Januar, april, jul, oktobar' },
+  { type: 'rezime_godisnji',  label: 'Godišnji presek',  schedule: '1. januara' },
+]
+
 export default function NotifikacijePage() {
   const [notifications, setNotifications] = useState<Notif[]>([])
   const [myMemberId, setMyMemberId] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [householdId, setHouseholdId] = useState<string | null>(null)
+  const [tab, setTab] = useState<Tab>('sve')
   const currentUserIdRef = useRef<string | null>(null)
   const myMemberIdRef = useRef<string | null>(null)
   const supabase = createClient()
@@ -183,7 +200,9 @@ export default function NotifikacijePage() {
     }
   }
 
-  const groups = groupByDate(notifications)
+  const tabTypes = TABS.find(t => t.id === tab)?.types ?? null
+  const filtered = tabTypes ? notifications.filter(n => tabTypes.includes(n.type)) : notifications
+  const groups = groupByDate(filtered)
   const hasUnread = notifications.some(n =>
     !(n.read_by ?? []).includes(currentUserId ?? '') &&
     n.triggered_by_member_id !== myMemberId
@@ -208,13 +227,56 @@ export default function NotifikacijePage() {
         </div>
       </div>
 
+      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '12px 20px', scrollbarWidth: 'none', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'var(--header-bg)' }}>
+        {TABS.map(t => {
+          const count = t.types ? notifications.filter(n => t.types!.includes(n.type)).length : notifications.length
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              style={{
+                padding: '6px 14px', borderRadius: 100, fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap',
+                border: '1.5px solid', cursor: 'pointer', flexShrink: 0,
+                borderColor: tab === t.id ? 'var(--accent-brand)' : 'rgba(255,255,255,0.15)',
+                background: tab === t.id ? 'var(--accent-brand)' : 'transparent',
+                color: tab === t.id ? '#111' : 'rgba(255,255,255,0.7)',
+              }}
+            >
+              {t.label}{count > 0 && tab !== t.id ? ` · ${count}` : ''}
+            </button>
+          )
+        })}
+      </div>
+
       <div style={{ maxWidth: 520, margin: '0 auto', padding: '20px 16px' }}>
         {loading ? (
           <p style={{ textAlign: 'center', color: 'var(--text-3)', fontSize: 14, paddingTop: 40 }}>Učitavanje...</p>
-        ) : notifications.length === 0 ? (
-          <div className="card" style={{ padding: '32px 20px', textAlign: 'center' }}>
-            <p style={{ fontSize: 14, color: 'var(--text-3)' }}>Nema notifikacija.</p>
-          </div>
+        ) : filtered.length === 0 ? (
+          tab === 'rezimei' ? (
+            <div className="card" style={{ padding: '20px' }}>
+              <p className="section-label" style={{ marginBottom: 16 }}>Automatski rezimei — raspored</p>
+              {REZIME_ITEMS.map((item, i) => {
+                const icon = typeIcon(item.type)
+                return (
+                  <div key={item.type} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: i < REZIME_ITEMS.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', background: icon.bg, flexShrink: 0 }}>
+                      <svg width="16" height="16" viewBox={icon.viewBox} fill="none" stroke={icon.color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        {icon.paths.map((d, idx) => <path key={idx} d={d} />)}
+                      </svg>
+                    </div>
+                    <div>
+                      <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>{item.label}</p>
+                      <p style={{ fontSize: 12, color: 'var(--text-3)' }}>{item.schedule}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="card" style={{ padding: '32px 20px', textAlign: 'center' }}>
+              <p style={{ fontSize: 14, color: 'var(--text-3)' }}>Nema notifikacija za sada.</p>
+            </div>
+          )
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             {groups.map(group => (
