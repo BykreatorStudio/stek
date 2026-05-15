@@ -218,16 +218,30 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
       const img = new Image()
       img.src = URL.createObjectURL(file)
       await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej })
-
-      const canvas = document.createElement('canvas')
-      canvas.width = img.width
-      canvas.height = img.height
-      const ctx = canvas.getContext('2d')!
-      ctx.drawImage(img, 0, 0)
       URL.revokeObjectURL(img.src)
 
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' })
+      // Try BarcodeDetector first (faster, works on full-res)
+      if ('BarcodeDetector' in window) {
+        try {
+          const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] })
+          const codes = await detector.detect(img)
+          const match = codes.find((c: any) => c.rawValue?.includes('suf.purs.gov.rs'))
+          if (match) { handleQrDetected(match.rawValue); return }
+        } catch {}
+      }
+
+      // jsQR fallback — scale down to max 2000px (jsQR unreliable on high-res photos)
+      const MAX = 2000
+      const scale = Math.min(1, MAX / Math.max(img.width, img.height))
+      const w = Math.round(img.width * scale)
+      const h = Math.round(img.height * scale)
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')!
+      ctx.drawImage(img, 0, 0, w, h)
+      const imageData = ctx.getImageData(0, 0, w, h)
+      const code = jsQR(imageData.data, w, h, { inversionAttempts: 'attemptBoth' })
 
       if (code?.data.includes('suf.purs.gov.rs')) {
         handleQrDetected(code.data)
@@ -280,7 +294,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
         return
       }
 
-      // Try BarcodeDetector first (Chrome/Android — same engine as native camera)
+      // Try BarcodeDetector first (native, faster)
       if ('BarcodeDetector' in window) {
         try {
           const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] })
@@ -288,16 +302,16 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
           const match = codes.find((c: any) => c.rawValue?.includes('suf.purs.gov.rs'))
           if (match) { handleQrDetected(match.rawValue); return }
         } catch {}
-      } else {
-        // Fallback: jsQR via canvas
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
-        const ctx = canvas.getContext('2d')!
-        ctx.drawImage(video, 0, 0)
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-        const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' })
-        if (code?.data.includes('suf.purs.gov.rs')) { handleQrDetected(code.data); return }
       }
+
+      // Always try jsQR as fallback (catches cases where BarcodeDetector throws or misses)
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      const ctx = canvas.getContext('2d')!
+      ctx.drawImage(video, 0, 0)
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' })
+      if (code?.data.includes('suf.purs.gov.rs')) { handleQrDetected(code.data); return }
 
       scheduleNextScan()
     }
@@ -411,7 +425,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
               background: 'rgba(255,255,255,0.15)', border: '1.5px solid rgba(255,255,255,0.3)',
               color: '#fff', cursor: 'pointer', backdropFilter: 'blur(8px)',
             }}>
-              Fotografišui QR kod
+              Fotografiši QR kod
               <input
                 ref={photoInputRef}
                 type="file"
