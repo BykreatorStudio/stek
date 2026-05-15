@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import TransakcijaForm from '@/components/forms/TransakcijaForm'
 import CekForm from '@/components/forms/CekForm'
+import QrScannerForm from '@/components/forms/QrScannerForm'
 
 type NavItemDef = { href: string; label: string; icon: (active: boolean) => React.ReactNode }
 
@@ -51,8 +52,8 @@ const navRight: NavItemDef[] = [
   },
 ]
 
-type Mode = null | 'picker' | 'transakcija' | 'cek'
-type PickerKey = 'transakcija' | 'cek' | 'nav_sef' | 'nav_dugovi'
+type Mode = null | 'picker' | 'transakcija' | 'cek' | 'qr'
+type PickerKey = 'transakcija' | 'cek' | 'nav_sef' | 'nav_dugovi' | 'qr'
 
 const PICKER_OPTIONS: { key: PickerKey; label: string; desc: string; icon: React.ReactNode }[] = [
   {
@@ -99,6 +100,20 @@ const PICKER_OPTIONS: { key: PickerKey; label: string; desc: string; icon: React
         <path d="M10.52,12.3H2.58c-.6,0-1.08-.48-1.08-1.08h0V3.3" />
         <path d="M36.5,27.5c-2.78,6.36-9.64,10-17.04,10-9.36,0-17.05-7.1-17.96-16.2" />
         <path d="M28.48,26.7h7.94c.6,0,1.08.48,1.08,1.08,0,0,0,0,0v7.92" />
+      </svg>
+    ),
+  },
+  {
+    key: 'qr',
+    label: 'Skeniraj račun',
+    desc: 'Fiskalni račun — QR kod',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+        stroke="var(--text-2)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="7" height="7" rx="1" />
+        <rect x="14" y="3" width="7" height="7" rx="1" />
+        <rect x="3" y="14" width="7" height="7" rx="1" />
+        <path d="M14 14h2v2h-2zM18 14h3M14 18h3M18 18v3M21 14v2" />
       </svg>
     ),
   },
@@ -188,7 +203,7 @@ export default function BottomNav() {
   const router = useRouter()
 
   function handlePickerSelect(key: PickerKey) {
-    if (key === 'transakcija' || key === 'cek') {
+    if (key === 'transakcija' || key === 'cek' || key === 'qr') {
       setMode(key)
     } else if (key === 'nav_sef') {
       setMode(null)
@@ -238,6 +253,7 @@ export default function BottomNav() {
       )}
       {mode === 'transakcija' && <TransakcijaForm onClose={() => setMode(null)} />}
       {mode === 'cek' && <CekForm onClose={() => setMode(null)} />}
+      {mode === 'qr' && <QrScannerForm onClose={() => setMode(null)} />}
     </>
   )
 }
