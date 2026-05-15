@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import webpush from 'web-push'
+import Anthropic from '@anthropic-ai/sdk'
 
 export function admin() {
   return createClient(
@@ -19,6 +20,40 @@ export function initWebpush() {
 
 export function fmt(n: number) {
   return new Intl.NumberFormat('sr-Latn-RS').format(Math.round(Math.abs(n)))
+}
+
+export async function generateInsights(context: object, periodLabel: string): Promise<any[]> {
+  if (!process.env.ANTHROPIC_API_KEY) return []
+  try {
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const prompt = `Ti si finansijski savetnik za srpsko domacinstvo. Analiziras finansijske podatke za ${periodLabel} i dajes konkretne, korisne savete.
+
+Jezik: srpski, latinica. Pisati prirodno — bez stranih reci i birokratskog jezika.
+
+Generisi onoliko uvida koliko ima smisla. Pravila:
+- Tacni iznosi u dinarima (npr. "12.500 dinara", ne "12500 RSD")
+- Konkretan savet — sta tacno uraditi
+- Ako nema podataka za uvid, preskoci
+- Ne izmisljaj podatke koji nisu u JSON-u
+
+Vrati SAMO JSON niz, bez ikakvog teksta pre ili posle:
+[{"tip":"upozorenje"|"savet"|"pozitivno","naslov":"Kratki naslov max 6 reci","opis":"Max 2-3 recenice sa tacknim brojevima."}]
+
+Podaci:
+${JSON.stringify(context, null, 2)}`
+
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }],
+    })
+    const raw = (msg.content[0] as any).text ?? ''
+    const match = raw.match(/\[[\s\S]*\]/)
+    if (!match) return []
+    return JSON.parse(match[0])
+  } catch {
+    return []
+  }
 }
 
 export async function sendPushToHousehold(

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { admin, initWebpush, fmt, insertAndPush } from '../_utils'
+import { admin, initWebpush, fmt, generateInsights, insertAndPush } from '../_utils'
 
 export async function GET(request: NextRequest) {
   initWebpush()
@@ -30,7 +30,6 @@ export async function GET(request: NextRequest) {
   const eurToRsd = (nbsRateRaw as any)?.eur_to_rsd ?? 117
   const toRSD = (a: number, c: string) => c === 'EUR' ? a * eurToRsd : a
   const catMap = new Map((catsRaw ?? []).map((c: any) => [c.id, c.name]))
-
   const txs = (txsRaw ?? []).filter((t: any) => !t.skip_accounting)
 
   const householdMap = new Map<string, typeof txs>()
@@ -42,13 +41,8 @@ export async function GET(request: NextRequest) {
 
   let sent = 0
   for (const [householdId, htxs] of householdMap) {
-    const rashodi = htxs
-      .filter((t: any) => t.type === 'rashod')
-      .reduce((s: number, t: any) => s + toRSD(t.amount, t.currency), 0)
-    const prihodi = htxs
-      .filter((t: any) => t.type === 'prihod')
-      .reduce((s: number, t: any) => s + toRSD(t.amount, t.currency), 0)
-
+    const rashodi = htxs.filter((t: any) => t.type === 'rashod').reduce((s: number, t: any) => s + toRSD(t.amount, t.currency), 0)
+    const prihodi = htxs.filter((t: any) => t.type === 'prihod').reduce((s: number, t: any) => s + toRSD(t.amount, t.currency), 0)
     if (rashodi === 0 && prihodi === 0) continue
 
     const catTotals: Record<string, number> = {}
@@ -58,17 +52,30 @@ export async function GET(request: NextRequest) {
       catTotals[name] = (catTotals[name] ?? 0) + toRSD(t.amount, t.currency)
     }
     const topCat = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0]
+    const kategorije = Object.entries(catTotals)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([naziv, iznos]) => ({ naziv, iznos: Math.round(iznos) }))
 
-    const parts = [`Potrošeno: ${fmt(rashodi)} din`]
+    const context = {
+      period: `proslih 7 dana (${from} do ${to})`,
+      rashodi: Math.round(rashodi),
+      prihodi: Math.round(prihodi),
+      kategorije,
+    }
+
+    const parts = [`Potroseno: ${fmt(rashodi)} din`]
     if (prihodi > 0) parts.push(`primljeno: ${fmt(prihodi)} din`)
-    if (topCat) parts.push(`najviše: ${topCat[0]} (${fmt(topCat[1])} din)`)
+    if (topCat) parts.push(`najvise: ${topCat[0]} (${fmt(topCat[1])} din)`)
+
+    const insights = await generateInsights(context, `proslih 7 dana`)
 
     const ok = await insertAndPush(supabase, {
       household_id: householdId,
       type: 'rezime_nedeljni',
       title: 'Nedeljni rezime',
       body: parts.join(' · '),
-      data: { from, to, rashodi: Math.round(rashodi), prihodi: Math.round(prihodi), topCategory: topCat?.[0] },
+      data: { from, to, rashodi: Math.round(rashodi), prihodi: Math.round(prihodi), topCategory: topCat?.[0], insights },
       external_key: `nedeljni_${from}`,
     })
     if (ok) sent++
