@@ -9,14 +9,33 @@ export default function Select({
   onChange,
   options,
   style,
+  onAdd,
 }: {
   value: string
   onChange: (value: string) => void
   options: Option[]
   style?: React.CSSProperties
+  onAdd?: (name: string) => Promise<string | null>
 }) {
   const [open, setOpen] = useState(false)
+  const [addingNew, setAddingNew] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [saving, setSaving] = useState(false)
   const selected = options.find(o => o.value === value) ?? options[0]
+
+  function handleClose() {
+    setOpen(false)
+    setAddingNew(false)
+    setNewName('')
+  }
+
+  async function handleAdd() {
+    if (!newName.trim() || !onAdd) return
+    setSaving(true)
+    const id = await onAdd(newName.trim())
+    setSaving(false)
+    if (id) { onChange(id); handleClose() }
+  }
 
   return (
     <div style={style}>
@@ -45,7 +64,7 @@ export default function Select({
             display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
             background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(6px)',
           }}
-          onClick={() => setOpen(false)}
+          onClick={handleClose}
         >
           <div
             style={{
@@ -63,7 +82,7 @@ export default function Select({
                 <button
                   key={o.value}
                   type="button"
-                  onClick={() => { onChange(o.value); setOpen(false) }}
+                  onClick={() => { onChange(o.value); handleClose() }}
                   style={{
                     width: '100%', padding: '16px 20px', fontSize: 14,
                     fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left',
@@ -84,6 +103,53 @@ export default function Select({
                   )}
                 </button>
               ))}
+
+              {onAdd && !addingNew && (
+                <button
+                  type="button"
+                  onClick={() => setAddingNew(true)}
+                  style={{
+                    width: '100%', padding: '16px 20px', fontSize: 14,
+                    fontFamily: 'inherit', cursor: 'pointer', textAlign: 'left',
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    background: 'transparent', border: 'none',
+                    borderTop: options.length > 0 ? '1px solid var(--border)' : 'none',
+                    color: 'var(--accent-dark)',
+                  }}
+                >
+                  <span style={{ fontSize: 18, lineHeight: 1 }}>+</span>
+                  <span>Dodaj kategoriju</span>
+                </button>
+              )}
+
+              {onAdd && addingNew && (
+                <div style={{ padding: '12px 16px', borderTop: options.length > 0 ? '1px solid var(--border)' : 'none', display: 'flex', gap: 8 }}>
+                  <input
+                    autoFocus
+                    value={newName}
+                    onChange={e => setNewName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleAdd()}
+                    placeholder="Naziv kategorije"
+                    style={{
+                      flex: 1, padding: '10px 14px', borderRadius: 10, fontSize: 14,
+                      border: '1.5px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)',
+                      outline: 'none', fontFamily: 'inherit',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAdd}
+                    disabled={!newName.trim() || saving}
+                    style={{
+                      padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 500,
+                      border: 'none', background: 'var(--text-1)', color: '#fff', cursor: 'pointer',
+                      opacity: !newName.trim() || saving ? 0.5 : 1, fontFamily: 'inherit',
+                    }}
+                  >
+                    {saving ? '...' : 'Dodaj'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

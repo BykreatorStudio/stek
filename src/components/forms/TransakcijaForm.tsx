@@ -199,22 +199,28 @@ export default function TransakcijaForm({ onClose }: { onClose: () => void }) {
                 options={buckets.map(b => ({ label: b.name, value: b.id }))}
                 style={{ marginBottom: 10 }}
               />
-              {categories.length === 0 ? (
-                <p style={{ fontSize: 13, color: 'var(--text-3)', padding: '12px 0', marginBottom: 10 }}>
-                  Nema kategorija — dodaj ih u Više → Kategorije
-                </p>
-              ) : (
-                <Select
-                  value={categoryId}
-                  onChange={v => {
-                    setCategoryId(v)
-                    const cat = categories.find(c => c.id === v)
-                    if (cat) setCurrency(cat.currency_default)
-                  }}
-                  options={categories.map(c => ({ label: c.name, value: c.id }))}
-                  style={{ marginBottom: 10 }}
-                />
-              )}
+              <Select
+                value={categoryId}
+                onChange={v => {
+                  setCategoryId(v)
+                  const cat = categories.find(c => c.id === v)
+                  if (cat) setCurrency(cat.currency_default)
+                }}
+                options={categories.map(c => ({ label: c.name, value: c.id }))}
+                style={{ marginBottom: 10 }}
+                onAdd={async (name) => {
+                  const { data } = await supabase.from('categories')
+                    .insert({ name, type, is_active: true })
+                    .select('id').single()
+                  if (data?.id) {
+                    const newCat = { id: data.id, name, type, is_active: true, currency_default: 'RSD' } as any
+                    setCategories(prev => [...prev, newCat].sort((a, b) => a.name.localeCompare(b.name)))
+                    setCurrency('RSD')
+                    return data.id
+                  }
+                  return null
+                }}
+              />
             </>
           )}
 

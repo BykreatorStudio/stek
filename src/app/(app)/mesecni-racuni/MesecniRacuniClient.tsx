@@ -42,6 +42,7 @@ export default function MesecniRacuniClient({
   const [loading, setLoading] = useState(false)
   const [receiveLoading, setReceiveLoading] = useState(false)
 
+  const [cats, setCats] = useState<Category[]>(categories)
   const [name, setName] = useState('')
   const [type, setType] = useState<'fiksni' | 'varijabilni'>('fiksni')
   const [bucketId, setBucketId] = useState(buckets[0]?.id ?? '')
@@ -441,18 +442,23 @@ export default function MesecniRacuniClient({
                   options={buckets.map(b => ({ label: b.name, value: b.id }))}
                   style={{ marginBottom: 10 }}
                 />
-                {categories.length > 0 ? (
-                  <Select
-                    value={categoryId}
-                    onChange={setCategoryId}
-                    options={categories.map(c => ({ label: c.name, value: c.id }))}
-                    style={{ marginBottom: 10 }}
-                  />
-                ) : (
-                  <p style={{ fontSize: 13, color: 'var(--text-3)', padding: '12px 0', marginBottom: 10 }}>
-                    Nema kategorija
-                  </p>
-                )}
+                <Select
+                  value={categoryId}
+                  onChange={setCategoryId}
+                  options={cats.map(c => ({ label: c.name, value: c.id }))}
+                  style={{ marginBottom: 10 }}
+                  onAdd={async (name) => {
+                    const { data } = await supabase.from('categories')
+                      .insert({ name, type: 'rashod', is_active: true })
+                      .select('id').single()
+                    if (data?.id) {
+                      const newCat = { id: data.id, name, type: 'rashod', is_active: true, currency_default: 'RSD' } as any
+                      setCats(prev => [...prev, newCat].sort((a: any, b: any) => a.name.localeCompare(b.name)))
+                      return data.id
+                    }
+                    return null
+                  }}
+                />
               </>
             )}
 
