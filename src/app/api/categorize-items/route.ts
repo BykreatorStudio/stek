@@ -18,18 +18,19 @@ export async function POST(req: NextRequest) {
   const { itemNames, categories } = await req.json()
 
   if (!itemNames?.length || !categories?.length) {
-    return NextResponse.json({ suggestions: {} })
+    return NextResponse.json({ suggestions: [] })
   }
 
   if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json({ suggestions: {} })
+    return NextResponse.json({ suggestions: [] })
   }
 
   const db = admin()
-  const suggestions: Record<string, string> = {}
-  const toAsk: string[] = []
+  // Result array — one category ID per item (empty string = no match)
+  const result: string[] = new Array(itemNames.length).fill('')
+  const uncachedIndices: number[] = []
 
-  // Check cache in parallel
+  // Parallel cache lookup
   const cacheResults = await Promise.all(
     itemNames.map((name: string) =>
       db.from('item_category_cache')
@@ -40,54 +41,58 @@ export async function POST(req: NextRequest) {
     )
   )
   for (let i = 0; i < itemNames.length; i++) {
-    const { data } = cacheResults[i]
-    if (data?.category_id) {
-      suggestions[itemNames[i]] = data.category_id
+    const catId = cacheResults[i].data?.category_id
+    if (catId) {
+      result[i] = catId
     } else {
-      toAsk.push(itemNames[i])
+      uncachedIndices.push(i)
     }
   }
 
-  if (toAsk.length === 0) {
-    return NextResponse.json({ suggestions })
+  if (uncachedIndices.length === 0) {
+    return NextResponse.json({ suggestions: result })
   }
 
   try {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    const catList = categories.map((c: any) => `${c.id}: ${c.name}`).join('\n')
-    const itemList = toAsk.join('\n')
+
+    const catList = categories.map((c: any) => `${c.id} — ${c.name}`).join('\n')
+    const itemList = uncachedIndices.map((i, j) => `${j + 1}. ${itemNames[i]}`).join('\n')
+    const count = uncachedIndices.length
 
     const msg = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
+      max_tokens: 512,
       messages: [{
         role: 'user',
-        content: `You are categorizing Serbian supermarket receipt items. Match each item to the best category.
+        content: `You are categorizing Serbian supermarket receipt items. Assign each item to the most fitting category.
 
-Categories (id: name):
+Available categories:
 ${catList}
 
-Items to categorize (return EXACTLY these strings as JSON keys, character-for-character):
+Items to categorize:
 ${itemList}
 
-Return ONLY a JSON object, no markdown, no explanation:
-{"exact item name here": "category_uuid", ...}
-
-Use the most specific matching category. If nothing fits well, pick the most general one.`,
+Return ONLY a JSON array with exactly ${count} category IDs, one per item, in the same order.
+Use empty string "" if no category fits well.
+Example for ${count} items: ${JSON.stringify(new Array(count).fill('category-uuid-here'))}`,
       }],
     })
 
     const raw = (msg.content[0] as any).text ?? ''
-    const match = raw.match(/\{[\s\S]*\}/)
+    const match = raw.match(/\[[\s\S]*\]/)
     if (match) {
-      const parsed = JSON.parse(match[0])
+      const parsed: string[] = JSON.parse(match[0])
       const cacheWrites: PromiseLike<any>[] = []
-      for (const [name, categoryId] of Object.entries(parsed)) {
-        if (typeof categoryId === 'string' && categoryId.length > 0) {
-          suggestions[name] = categoryId
+
+      for (let j = 0; j < uncachedIndices.length; j++) {
+        const i = uncachedIndices[j]
+        const catId = typeof parsed[j] === 'string' ? parsed[j] : ''
+        result[i] = catId
+        if (catId) {
           cacheWrites.push(
             db.from('item_category_cache').upsert(
-              { item_name_normalized: normalize(name), category_id: categoryId },
+              { item_name_normalized: normalize(itemNames[i]), category_id: catId },
               { onConflict: 'item_name_normalized' }
             )
           )
@@ -99,5 +104,5 @@ Use the most specific matching category. If nothing fits well, pick the most gen
     console.error('Categorization error:', err)
   }
 
-  return NextResponse.json({ suggestions })
+  return NextResponse.json({ suggestions: result })
 }

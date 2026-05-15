@@ -129,7 +129,8 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
       setMerchantName(data.merchantName || '')
 
       const cats = categoriesRef.current
-      let suggestions: Record<string, string> = {}
+      // suggestions is an array — one category ID per item at the same index
+      let suggestions: string[] = []
       if (cats.length > 0) {
         try {
           const catRes = await fetch('/api/categorize-items', {
@@ -141,20 +142,13 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
             }),
           })
           const catData = await catRes.json()
-          suggestions = catData.suggestions ?? {}
+          suggestions = Array.isArray(catData.suggestions) ? catData.suggestions : []
         } catch {}
       }
 
-      // Case-insensitive fallback lookup — Claude might return slightly different casing
-      const suggestionsLower = new Map(
-        Object.entries(suggestions).map(([k, v]) => [k.trim().toLowerCase(), v])
-      )
-      const getCat = (name: string) =>
-        suggestions[name] || suggestionsLower.get(name.trim().toLowerCase()) || ''
-
-      setItems(data.items.map((item: any) => ({
+      setItems(data.items.map((item: any, i: number) => ({
         ...item,
-        categoryId: getCat(item.name),
+        categoryId: suggestions[i] || '',
       })))
       setView('review')
     } catch {
