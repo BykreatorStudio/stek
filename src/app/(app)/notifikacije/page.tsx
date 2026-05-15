@@ -12,6 +12,7 @@ type Notif = {
   created_at: string
   read_by: string[]
   triggered_by_member_id: string | null
+  data?: any
 }
 
 function timeAgo(iso: string): string {
@@ -106,6 +107,7 @@ export default function NotifikacijePage() {
   const [loading, setLoading] = useState(true)
   const [householdId, setHouseholdId] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('sve')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const currentUserIdRef = useRef<string | null>(null)
   const myMemberIdRef = useRef<string | null>(null)
   const supabase = createClient()
@@ -133,7 +135,7 @@ export default function NotifikacijePage() {
 
       const { data: notifs } = await supabase
         .from('notifications')
-        .select('*')
+        .select('id, type, title, body, created_at, read_by, triggered_by_member_id, data')
         .eq('household_id', hid)
         .order('created_at', { ascending: false })
         .limit(100)
@@ -296,30 +298,48 @@ export default function NotifikacijePage() {
                           onClick: () => toggleRead(n),
                         }]}
                       >
-                        <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'flex-start', gap: 12, position: 'relative' }}>
-                          {unread && (
+                        <div
+                          onClick={() => setExpandedId(expandedId === n.id ? null : n.id)}
+                          style={{ padding: '14px 16px', position: 'relative', cursor: 'pointer' }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                            {unread && (
+                              <div style={{
+                                position: 'absolute', left: 8, top: 18,
+                                width: 4, height: 4, borderRadius: '50%', background: '#f87171',
+                              }} />
+                            )}
                             <div style={{
-                              position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
-                              width: 4, height: 4, borderRadius: '50%', background: '#f87171',
-                            }} />
+                              width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              background: icon.bg,
+                            }}>
+                              <svg width="16" height="16" viewBox={icon.viewBox}
+                                fill={icon.isFill ? icon.color : 'none'}
+                                stroke={icon.isFill ? 'none' : icon.color}
+                                strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                {icon.paths.map((d, i) => <path key={i} d={d} />)}
+                              </svg>
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', marginBottom: 2 }}>{n.title}</p>
+                              <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.4 }}>{n.body}</p>
+                            </div>
+                            <p style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0, marginLeft: 4, paddingTop: 2 }}>{timeAgo(n.created_at)}</p>
+                          </div>
+                          {expandedId === n.id && n.type === 'ai_uvidi' && Array.isArray(n.data?.insights) && (
+                            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              {n.data.insights.map((ins: any, idx: number) => {
+                                const tipColor = ins.tip === 'upozorenje' ? { bg: 'var(--red-light)', color: 'var(--red)' } : ins.tip === 'pozitivno' ? { bg: 'var(--accent-light)', color: 'var(--accent-dark)' } : { bg: 'var(--bg-subtle)', color: 'var(--text-2)' }
+                                return (
+                                  <div key={idx} style={{ background: tipColor.bg, borderRadius: 10, padding: '10px 12px' }}>
+                                    <p style={{ fontSize: 12, fontWeight: 500, color: tipColor.color, marginBottom: 3 }}>{ins.naslov}</p>
+                                    <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.45 }}>{ins.opis}</p>
+                                  </div>
+                                )
+                              })}
+                            </div>
                           )}
-                          <div style={{
-                            width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            background: icon.bg,
-                          }}>
-                            <svg width="16" height="16" viewBox={icon.viewBox}
-                              fill={icon.isFill ? icon.color : 'none'}
-                              stroke={icon.isFill ? 'none' : icon.color}
-                              strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                              {icon.paths.map((d, i) => <path key={i} d={d} />)}
-                            </svg>
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', marginBottom: 2 }}>{n.title}</p>
-                            <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.4 }}>{n.body}</p>
-                          </div>
-                          <p style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0, marginLeft: 4, paddingTop: 2 }}>{timeAgo(n.created_at)}</p>
                         </div>
                       </SwipeActions>
                     )

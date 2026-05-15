@@ -129,7 +129,7 @@ export async function POST() {
 
 Jezik: srpski, latinica. Pisati prirodno kao sto bi govorio pametan prijatelj koji se razume u finansije — bez stranih reci, bez birokratskog jezika. Primeri loseg pisanja: "projicirana potrosnja", "alokacija sredstava", "optimizacija". Primeri dobrog pisanja: "ocekivana potrosnja do kraja meseca", "slobodan novac", "rata kredita".
 
-Na osnovu podataka ispod, generisi tacno 3 do 5 uvida. Pravila:
+Na osnovu podataka ispod, generisi onoliko uvida koliko ima smisla — ni vise ni manje. Pravila:
 - Koristiti tacne iznose u dinarima iz podataka (pisati "12.500 dinara" ne "12500 RSD")
 - Konkretan savet — sta tacno uraditi, ne opstosti
 - Ako nema podataka za odredjeni uvid, preskoci ga

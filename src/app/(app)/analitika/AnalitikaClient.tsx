@@ -163,7 +163,7 @@ export default function AnalitikaClient({
       const body = upozorenja > 0
         ? `${json.insights.length} uvida · ${upozorenja} upozorenje`
         : `${json.insights.length} uvida`
-      notifyHousehold({ householdId, type: 'ai_uvidi', title: 'AI analiza završena', body })
+      notifyHousehold({ householdId, type: 'ai_uvidi', title: 'AI analiza završena', body, data: { insights: json.insights } })
     } catch {
       setInsightsError('Nije moguće učitati analizu')
     } finally {
