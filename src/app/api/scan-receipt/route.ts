@@ -30,38 +30,106 @@ function extractCookies(res: Response): string {
   return combined.split(/,(?=\s*[A-Za-z_]+=)/).map(c => c.split(';')[0].trim()).join('; ')
 }
 
-// Parse items from journal text (plain text receipt format)
-function parseJournal(journal: string): ReceiptItem[] {
-  const items: ReceiptItem[] = []
-  const lines = journal.split('\n').map(l => l.trim()).filter(Boolean)
+function parseSrbNum(s: string): number {
+  return Math.round(parseFloat(s.replace(/\./g, '').replace(',', '.')) * 100) / 100 || 0
+}
 
-  // Find item lines — pattern: name + quantity + unit price + total
-  // Serbian receipt format: "Naziv artikla   1 KOM  100,00  100,00"
-  const itemPattern = /^(.+?)\s+([\d,]+)\s+(\w+)\s+([\d.,]+)\s+([\d.,]+)\s*[A-GŠ]\s*$/
-  const simplePattern = /^(.+?)\s+([\d,]+)\s+([\d.,]+)\s*$/
-
-  for (const line of lines) {
-    const m = itemPattern.exec(line)
-    if (m) {
-      const name = m[1].trim()
-      const quantity = parseFloat(m[2].replace(',', '.')) || 1
-      const unitPrice = parseFloat(m[4].replace('.', '').replace(',', '.')) || 0
-      const total = parseFloat(m[5].replace('.', '').replace(',', '.')) || 0
-      if (name && total > 0 && name.length > 1 && !/^[-=*]+$/.test(name)) {
-        items.push({ name, quantity, unit: m[3] || 'KOM', unitPrice, total })
-      }
-      continue
-    }
-    const s = simplePattern.exec(line)
-    if (s) {
-      const name = s[1].trim()
-      const quantity = parseFloat(s[2].replace(',', '.')) || 1
-      const total = parseFloat(s[3].replace('.', '').replace(',', '.')) || 0
-      if (name && total > 0 && name.length > 1 && !/^[-=*:]+$/.test(name) && !/ukupno|pdv|porez|total|zbir/i.test(name)) {
-        items.push({ name, quantity, unit: 'KOM', unitPrice: total / quantity, total })
+function extractMerchantFromJournal(journal: string): string {
+  const lines = journal.replace(/\r/g, '').split('\n').map(l => l.trim()).filter(Boolean)
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\d{9}$/.test(lines[i])) {
+      for (let j = i + 1; j < lines.length; j++) {
+        if (!/^[=\-*\s]+$/.test(lines[j])) return lines[j]
       }
     }
   }
+  return ''
+}
+
+function parseJournal(journal: string): ReceiptItem[] {
+  const items: ReceiptItem[] = []
+  const lines = journal.replace(/\r/g, '').split('\n').map(l => l.trim()).filter(Boolean)
+
+  let inItems = false
+  let pendingName = ''
+
+  for (const line of lines) {
+    // Start of items section
+    if (/арти[кц]ли/iu.test(line) || /^artikli/iu.test(line)) {
+      inItems = true
+      pendingName = ''
+      continue
+    }
+
+    // End of items section
+    if (inItems && /^(укупан|укупно|ukupan|ukupno|рабат|rabat|пдв|pdv|порез|porez|готовина|gotovina|картица|kartica|повраћај|povracaj)/iu.test(line)) {
+      break
+    }
+
+    if (!inItems) continue
+    if (/^[=\-*\s]+$/.test(line)) continue
+
+    // Pattern 1 (single line with * or x): "NAME  QTY UNIT * PRICE = TOTAL [VAT]"
+    const p1 = /^(.+?)\s+([\d.,]+)\s+([A-Za-zКОМкомШТшт\.]+)\s*[*×xX]\s*([\d.,]+)\s*=?\s*([\d.,]+)\s*[A-GŠЕАБВГД]?\s*$/i.exec(line)
+    if (p1) {
+      const name = p1[1].trim()
+      const qty = parseSrbNum(p1[2])
+      const unitPrice = parseSrbNum(p1[4])
+      const total = parseSrbNum(p1[5])
+      if (name.length > 1 && total > 0 && !/^[=\-*]+$/.test(name)) {
+        items.push({ name, quantity: qty || 1, unit: p1[3].toUpperCase(), unitPrice, total })
+        pendingName = ''
+        continue
+      }
+    }
+
+    // Pattern 2 (single line no * =): "NAME  QTY UNIT  UNIT_PRICE  TOTAL [VAT]"
+    const p2 = /^(.+?)\s+([\d.,]+)\s+([A-Za-zКОМкомШТшт\.]+)\s+([\d.,]+)\s+([\d.,]+)\s*[A-GŠЕАБВГД]?\s*$/i.exec(line)
+    if (p2) {
+      const name = p2[1].trim()
+      const qty = parseSrbNum(p2[2])
+      const unitPrice = parseSrbNum(p2[4])
+      const total = parseSrbNum(p2[5])
+      if (name.length > 1 && total > 0 && qty > 0 && qty < 100000 && !/^[=\-*]+$/.test(name)) {
+        items.push({ name, quantity: qty, unit: p2[3].toUpperCase(), unitPrice, total })
+        pendingName = ''
+        continue
+      }
+    }
+
+    // Pattern 3 (detail line for multi-line format): "QTY UNIT * PRICE = TOTAL [VAT]"
+    const p3 = /^([\d.,]+)\s+([A-Za-zКОМкомШТшт\.]+)\s*[*×xX]?\s*([\d.,]+)\s*=?\s*([\d.,]+)\s*[A-GŠЕАБВГД]?\s*$/i.exec(line)
+    if (p3 && pendingName) {
+      const qty = parseSrbNum(p3[1])
+      const unitPrice = parseSrbNum(p3[3])
+      const total = parseSrbNum(p3[4])
+      if (total > 0) {
+        items.push({ name: pendingName, quantity: qty || 1, unit: p3[2].toUpperCase(), unitPrice, total })
+        pendingName = ''
+        continue
+      }
+    }
+
+    // Pattern 4 (total-only detail line): "TOTAL [VAT]" when pendingName is set
+    const p4 = /^([\d.,]+)\s*[A-GŠЕАБВГД]\s*$/.exec(line)
+    if (p4 && pendingName) {
+      const total = parseSrbNum(p4[1])
+      if (total > 0) {
+        items.push({ name: pendingName, quantity: 1, unit: 'KOM', unitPrice: total, total })
+        pendingName = ''
+        continue
+      }
+    }
+
+    // Candidate name line — pure text or text with minimal digits
+    const digitCount = (line.match(/\d/g) ?? []).length
+    if (line.length > 1 && digitCount <= 2 && !/^[=\-*:]+$/.test(line)) {
+      pendingName = line
+    } else {
+      pendingName = ''
+    }
+  }
+
   return items
 }
 
@@ -122,8 +190,10 @@ async function tryJsonApi(url: string): Promise<{ items: ReceiptItem[]; merchant
   const resultKeys = result && result !== data ? Object.keys(result).join(',') : ''
   if (journal) {
     const items = parseJournal(journal)
-    const journalSnippet = journal.replace(/\r/g, '').slice(0, 400)
-    return { items, merchantName, debug: debug + ` journal_parsed items=${items.length} topKeys=${topKeys} resultKeys=${resultKeys} journal=<<${journalSnippet}>>` }
+    const journalMerchant = extractMerchantFromJournal(journal)
+    const resolvedMerchant = merchantName || journalMerchant
+    const journalSnippet = journal.replace(/\r/g, '').slice(0, 1500)
+    return { items, merchantName: resolvedMerchant, debug: debug + ` journal_parsed items=${items.length} merchant=${resolvedMerchant} topKeys=${topKeys} resultKeys=${resultKeys} journal=<<${journalSnippet}>>` }
   }
 
   return { items: [], merchantName, debug: debug + ` no_items topKeys=${topKeys} resultKeys=${resultKeys}` }
