@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import jsQR from 'jsqr'
 
 type Category = { id: string; name: string }
 type Bucket = { id: string; name: string }
@@ -80,12 +79,9 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
   const [categories, setCategories] = useState<Category[]>([])
   const [alreadyPaid, setAlreadyPaid] = useState(false)
   const [currentMember, setCurrentMember] = useState<{ id: string } | null>(null)
-  const [detected, setDetected] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const rafRef = useRef<number>(0)
+  const scannerRef = useRef<any>(null)
 
   const supabase = createClient()
   const router = useRouter()
@@ -104,59 +100,12 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
       .then(({ data }) => setCategories(data ?? []))
   }, [])
 
-  const stopCamera = useCallback(() => {
-    cancelAnimationFrame(rafRef.current)
-    streamRef.current?.getTracks().forEach(t => t.stop())
-    streamRef.current = null
-  }, [])
-
-  useEffect(() => {
-    if (view !== 'scanning') return
-
-    async function startCamera() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-        })
-        streamRef.current = stream
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          videoRef.current.play()
-        }
-        tick()
-      } catch {
-        setError('Nije moguće pristupiti kameri. Dozvoli pristup u podešavanjima browsera.')
-        setView('error')
-      }
+  const handleQrDetected = useCallback(async (qrUrl: string) => {
+    if (scannerRef.current) {
+      scannerRef.current.stop()
+      scannerRef.current.destroy()
+      scannerRef.current = null
     }
-
-    function tick() {
-      const video = videoRef.current
-      const canvas = canvasRef.current
-      if (!video || !canvas || video.readyState < video.HAVE_ENOUGH_DATA) {
-        rafRef.current = requestAnimationFrame(tick)
-        return
-      }
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
-      const ctx = canvas.getContext('2d')!
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' })
-      if (code?.data && code.data.includes('suf.purs.gov.rs')) {
-        handleQrDetected(code.data)
-        return
-      }
-      rafRef.current = requestAnimationFrame(tick)
-    }
-
-    startCamera()
-    return stopCamera
-  }, [view])
-
-  async function handleQrDetected(qrUrl: string) {
-    setDetected(true)
-    stopCamera()
     setView('loading')
 
     try {
@@ -172,14 +121,13 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
         return
       }
       if (!data.items?.length) {
-        setError('Nisu pronađene stavke na računu. Verovatno nije fiskalni račun.')
+        setError('Nisu pronađene stavke na računu.')
         setView('error')
         return
       }
 
       setMerchantName(data.merchantName || '')
 
-      // Get AI category suggestions
       let suggestions: Record<string, string> = {}
       try {
         const catRes = await fetch('/api/categorize-items', {
@@ -204,7 +152,53 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
       setError('Greška pri komunikaciji sa serverom')
       setView('error')
     }
-  }
+  }, [categories])
+
+  useEffect(() => {
+    if (view !== 'scanning' || !videoRef.current) return
+
+    let destroyed = false
+
+    async function startScanner() {
+      try {
+        const { default: QrScanner } = await import('qr-scanner')
+        if (destroyed) return
+
+        const scanner = new QrScanner(
+          videoRef.current!,
+          result => {
+            if (result.data.includes('suf.purs.gov.rs')) {
+              handleQrDetected(result.data)
+            }
+          },
+          {
+            preferredCamera: 'environment',
+            highlightScanRegion: false,
+            highlightCodeOutline: false,
+            returnDetailedScanResult: true,
+          }
+        )
+        scannerRef.current = scanner
+        await scanner.start()
+      } catch {
+        if (!destroyed) {
+          setError('Nije moguće pristupiti kameri. Dozvoli pristup u podešavanjima browsera.')
+          setView('error')
+        }
+      }
+    }
+
+    startScanner()
+
+    return () => {
+      destroyed = true
+      if (scannerRef.current) {
+        scannerRef.current.stop()
+        scannerRef.current.destroy()
+        scannerRef.current = null
+      }
+    }
+  }, [view, handleQrDetected])
 
   async function handleSave() {
     if (!items.length || !bucketId) return
@@ -249,7 +243,6 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
       {view === 'scanning' && (
         <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <video ref={videoRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
-          <canvas ref={canvasRef} style={{ display: 'none' }} />
 
           {/* Overlay */}
           <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
@@ -257,21 +250,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
               width: 240, height: 240, borderRadius: 20,
               border: '3px solid var(--accent)',
               boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)',
-              position: 'relative',
-            }}>
-              {/* Corner marks */}
-              {[['0', '0'], ['auto', '0'], ['0', 'auto'], ['auto', 'auto']].map(([b, r], i) => (
-                <div key={i} style={{
-                  position: 'absolute', top: i < 2 ? -3 : 'auto', bottom: i >= 2 ? -3 : 'auto',
-                  left: i % 2 === 0 ? -3 : 'auto', right: i % 2 === 1 ? -3 : 'auto',
-                  width: 24, height: 24, borderRadius: 4,
-                  borderTop: i < 2 ? '3px solid var(--accent)' : 'none',
-                  borderBottom: i >= 2 ? '3px solid var(--accent)' : 'none',
-                  borderLeft: i % 2 === 0 ? '3px solid var(--accent)' : 'none',
-                  borderRight: i % 2 === 1 ? '3px solid var(--accent)' : 'none',
-                }} />
-              ))}
-            </div>
+            }} />
             <p style={{ color: '#fff', fontSize: 14, fontWeight: 500, textAlign: 'center', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
               Usmeri kameru ka QR kodu<br />
               <span style={{ fontSize: 12, fontWeight: 400, opacity: 0.7 }}>na fiskalnom računu</span>
@@ -315,7 +294,7 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
             <button onClick={onClose} style={{ flex: 1, padding: '13px', borderRadius: 14, fontSize: 14, border: '1.5px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontFamily: 'inherit' }}>
               Zatvori
             </button>
-            <button onClick={() => { setDetected(false); setView('scanning') }} style={{ flex: 1, padding: '13px', borderRadius: 14, fontSize: 14, fontWeight: 500, border: 'none', background: 'var(--text-1)', color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>
+            <button onClick={() => setView('scanning')} style={{ flex: 1, padding: '13px', borderRadius: 14, fontSize: 14, fontWeight: 500, border: 'none', background: 'var(--text-1)', color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>
               Pokušaj ponovo
             </button>
           </div>
