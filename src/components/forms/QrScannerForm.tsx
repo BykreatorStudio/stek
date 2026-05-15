@@ -197,9 +197,10 @@ export default function QrScannerForm({ onClose }: { onClose: () => void }) {
         } catch {}
       }
 
+      const validCatIds = new Set(cats.map(c => c.id))
       setItems(data.items.map((item: any, i: number) => ({
         ...item,
-        categoryId: suggestions[i] || '',
+        categoryId: (suggestions[i] && validCatIds.has(suggestions[i])) ? suggestions[i] : '',
       })))
       setView('review')
     } catch {

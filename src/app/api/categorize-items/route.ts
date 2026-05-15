@@ -26,11 +26,13 @@ export async function POST(req: NextRequest) {
   }
 
   const db = admin()
+  const validIds = new Set(categories.map((c: any) => c.id))
+
   // Result array — one category ID per item (empty string = no match)
   const result: string[] = new Array(itemNames.length).fill('')
   const uncachedIndices: number[] = []
 
-  // Parallel cache lookup
+  // Parallel cache lookup — only use cached IDs that still exist in current categories
   const cacheResults = await Promise.all(
     itemNames.map((name: string) =>
       db.from('item_category_cache')
@@ -42,7 +44,7 @@ export async function POST(req: NextRequest) {
   )
   for (let i = 0; i < itemNames.length; i++) {
     const catId = cacheResults[i].data?.category_id
-    if (catId) {
+    if (catId && validIds.has(catId)) {
       result[i] = catId
     } else {
       uncachedIndices.push(i)
